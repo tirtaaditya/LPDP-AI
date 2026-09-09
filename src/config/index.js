@@ -3,7 +3,8 @@ const path = require('path');
 const dotenv = require('dotenv');
 
 // Always load .env from project root (works with PM2 even if cwd is wrong).
-const projectRoot = path.resolve(__dirname, '..');
+// __dirname = .../src/config → project root is two levels up
+const projectRoot = path.resolve(__dirname, '../..');
 const envPath = path.join(projectRoot, '.env');
 
 function loadEnvFile(filePath) {
