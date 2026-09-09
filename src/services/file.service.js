@@ -8,17 +8,43 @@ const config = require('../config');
 
 const MAX_FILES = 10;
 const DOWNLOAD_TIMEOUT_MS = 60000;
+const IMAGE_EXTS = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp']);
 
 function formatMb(bytes) {
   return (Number(bytes) / (1024 * 1024)).toFixed(2);
 }
 
+function isImageExt(ext) {
+  return IMAGE_EXTS.has(String(ext || '').toLowerCase());
+}
+
+function mimeFromExt(ext) {
+  const e = String(ext || '').toLowerCase();
+  const map = {
+    pdf: 'application/pdf',
+    jpg: 'image/jpeg',
+    jpeg: 'image/jpeg',
+    png: 'image/png',
+    gif: 'image/gif',
+    webp: 'image/webp',
+    bmp: 'image/bmp',
+    txt: 'text/plain',
+    docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  };
+  return map[e] || 'application/octet-stream';
+}
+
+function normalizeAllowedTypes(raw) {
+  return String(raw || '')
+    .split(/[,;\s]+/)
+    .map((s) => s.trim().toLowerCase().replace(/^\./, ''))
+    .filter(Boolean);
+}
+
 async function getAllowedExtensions() {
   const raw = await db.getSetting('allowed_file_types', 'pdf,docx,txt');
-  return raw
-    .split(',')
-    .map((s) => s.trim().toLowerCase())
-    .filter(Boolean);
+  const list = normalizeAllowedTypes(raw);
+  return list.length ? list : ['pdf', 'docx', 'txt'];
 }
 
 async function getMaxUploadBytes() {
@@ -69,6 +95,11 @@ function guessExtension(urlObj, contentType, contentDisposition) {
   if (ct.includes('pdf')) return 'pdf';
   if (ct.includes('wordprocessingml') || ct.includes('msword')) return 'docx';
   if (ct.includes('text/plain')) return 'txt';
+  if (ct.includes('jpeg')) return 'jpeg';
+  if (ct.includes('png')) return 'png';
+  if (ct.includes('gif')) return 'gif';
+  if (ct.includes('webp')) return 'webp';
+  if (ct.startsWith('image/')) return ct.split('/')[1] || 'jpg';
   return '';
 }
 
@@ -109,9 +140,9 @@ async function extractTextFromBuffer(buffer, ext, label = 'file') {
     const text = (result.text || '').trim();
     if (!text) {
       // Scanned / image-only PDF → send to OpenAI file/vision mode
-      return { text: '', needsVision: true, buffer };
+      return { text: '', needsVision: true, buffer, mime: 'application/pdf', kind: 'pdf' };
     }
-    return { text, needsVision: false };
+    return { text, needsVision: false, mime: 'application/pdf', kind: 'pdf' };
   }
 
   if (ext === 'docx') {
@@ -122,7 +153,17 @@ async function extractTextFromBuffer(buffer, ext, label = 'file') {
       err.code = 'FILE_EMPTY';
       throw err;
     }
-    return { text, needsVision: false };
+    return { text, needsVision: false, mime: mimeFromExt(ext), kind: 'docx' };
+  }
+
+  if (isImageExt(ext)) {
+    return {
+      text: '',
+      needsVision: true,
+      buffer,
+      mime: mimeFromExt(ext),
+      kind: 'image',
+    };
   }
 
   const err = new Error(`Unsupported file type .${ext}: ${label}`);
@@ -188,6 +229,7 @@ async function downloadOne(urlString) {
       ext,
       text: extracted.text,
       needsVision: extracted.needsVision,
+      mime: extracted.mime || mimeFromExt(ext),
       buffer: extracted.needsVision ? buffer : null,
     };
   } catch (err) {
@@ -265,7 +307,10 @@ async function downloadAndExtractMany(urls) {
 
   const visionNotes = files
     .filter((f) => f.needsVision)
-    .map((f) => `--- FILE (scanned PDF, sent to AI vision): ${f.fileName} ---\nURL: ${f.url}`);
+    .map((f) => {
+      const kind = isImageExt(f.ext) ? 'image' : 'scanned PDF';
+      return `--- FILE (${kind}, sent to AI vision): ${f.fileName} ---\nURL: ${f.url}`;
+    });
 
   const combinedText = [...textParts, ...visionNotes].join('\n\n');
 
@@ -273,16 +318,19 @@ async function downloadAndExtractMany(urls) {
     .filter((f) => f.needsVision && f.buffer)
     .map((f) => ({
       fileName: f.fileName,
-      mime: 'application/pdf',
+      mime: f.mime || mimeFromExt(f.ext),
       buffer: f.buffer,
       url: f.url,
+      kind: isImageExt(f.ext) ? 'image' : 'pdf',
     }));
 
   return {
     hasFile: true,
     fileName: files.map((f) => f.fileName).join(', '),
     fileSize: files.reduce((sum, f) => sum + f.fileSize, 0),
-    fileText: combinedText || (visionFiles.length ? '[Scanned PDF(s) — processed via OpenAI file/vision]' : ''),
+    fileText:
+      combinedText ||
+      (visionFiles.length ? '[Image/scanned file(s) — processed via OpenAI vision]' : ''),
     files: files.map((f) => ({
       url: f.url,
       file_name: f.fileName,
@@ -294,6 +342,24 @@ async function downloadAndExtractMany(urls) {
   };
 }
 
+function toVisionContentPart(f) {
+  const mime = f.mime || mimeFromExt(path.extname(f.fileName || '').replace('.', ''));
+  const b64 = f.buffer.toString('base64');
+  if (String(mime).startsWith('image/') || f.kind === 'image') {
+    return {
+      type: 'image_url',
+      image_url: { url: `data:${mime};base64,${b64}` },
+    };
+  }
+  return {
+    type: 'file',
+    file: {
+      filename: f.fileName || 'document.pdf',
+      file_data: `data:${mime || 'application/pdf'};base64,${b64}`,
+    },
+  };
+}
+
 module.exports = {
   getAllowedExtensions,
   getMaxUploadBytes,
@@ -301,5 +367,9 @@ module.exports = {
   parseFileUrls,
   downloadAndExtractMany,
   extractTextFromBuffer,
+  normalizeAllowedTypes,
+  mimeFromExt,
+  isImageExt,
+  toVisionContentPart,
   MAX_FILES,
 };

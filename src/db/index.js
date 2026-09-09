@@ -198,7 +198,7 @@ async function seed() {
     system_prompt:
       'You are a data extraction assistant. Always respond with valid JSON only. Prefer shape: {"status":"success","data":{...}}. If extraction fails, use {"status":"error","data":null,"message":"..."}. Do not wrap in markdown.',
     max_upload_mb: String(config.maxUploadMb),
-    allowed_file_types: 'pdf,docx,txt',
+    allowed_file_types: 'pdf,docx,txt,jpg,jpeg,png,webp',
     ip_whitelist_enabled: 'false',
   };
 

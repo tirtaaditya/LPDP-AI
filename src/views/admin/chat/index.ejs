@@ -7,6 +7,7 @@
       <div class="small text-muted">
         Provider: <strong class="text-uppercase"><%= provider %></strong>
         · Model: <strong><%= model %></strong>
+        · Files: <strong><%= (typeof allowedTypes !== 'undefined' && allowedTypes.length) ? allowedTypes.join(', ') : 'pdf, docx, txt' %></strong>
       </div>
     </div>
     <button type="button" id="btn-clear-chat" class="btn btn-sm btn-light-danger">Clear chat</button>
@@ -23,7 +24,7 @@
   <form id="chat-form" class="chat-composer">
     <label class="chat-attach btn btn-light-primary mb-0" title="Attach files">
       <i class="bi bi-paperclip"></i>
-      <input type="file" id="chat-files" name="files" multiple accept=".pdf,.docx,.txt,application/pdf" hidden />
+      <input type="file" id="chat-files" name="files" multiple accept="<%= typeof acceptAttr !== 'undefined' ? acceptAttr : '.pdf,.docx,.txt,application/pdf' %>" hidden />
     </label>
     <textarea id="chat-input" rows="1" placeholder="Tulis pesan... (Enter kirim, Shift+Enter baris baru)" required></textarea>
     <button type="submit" id="chat-send" class="btn btn-primary">

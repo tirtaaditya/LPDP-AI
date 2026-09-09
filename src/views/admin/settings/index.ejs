@@ -82,9 +82,19 @@
         <label class="form-label">Max upload (MB)</label>
         <input class="form-control" name="max_upload_mb" value="<%= settings.max_upload_mb || '' %>" />
       </div>
-      <div class="col-md-3">
+      <div class="col-12">
         <label class="form-label">Allowed file types</label>
-        <input class="form-control" name="allowed_file_types" value="<%= settings.allowed_file_types || '' %>" />
+        <input
+          class="form-control"
+          name="allowed_file_types"
+          value="<%= settings.allowed_file_types || 'pdf,docx,txt' %>"
+          placeholder="pdf,docx,txt,jpg,jpeg,png"
+        />
+        <div class="form-text">
+          Pisahkan dengan koma. Contoh: <code>pdf,docx,txt,jpg,jpeg,png,webp</code>.
+          Berlaku untuk API extract (<code>file_urls</code>) dan Admin Chat upload.
+          Image/scan PDF butuh provider <strong>OpenAI</strong> (vision).
+        </div>
       </div>
       <div class="col-12">
         <label class="form-label">System prompt</label>

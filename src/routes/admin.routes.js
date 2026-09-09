@@ -14,17 +14,19 @@ if (!fs.existsSync(config.uploadsDir)) {
 }
 
 function chatUpload(req, res, next) {
-  fileService
-    .getMaxUploadBytes()
-    .then((max) => {
+  Promise.all([fileService.getMaxUploadBytes(), fileService.getAllowedExtensions()])
+    .then(([max, allowed]) => {
       const mw = multer({
         dest: config.uploadsDir,
         limits: { fileSize: max, files: 5 },
         fileFilter(req, file, cb) {
           const ext = path.extname(file.originalname || '').replace('.', '').toLowerCase();
-          const ok = ['pdf', 'docx', 'txt'].includes(ext);
-          if (!ok) {
-            return cb(new Error('Only pdf, docx, txt are allowed'));
+          if (!allowed.includes(ext)) {
+            return cb(
+              new Error(
+                `File type .${ext || '?'} not allowed. Allowed: ${allowed.join(', ')} (Admin → Settings)`
+              )
+            );
           }
           return cb(null, true);
         },

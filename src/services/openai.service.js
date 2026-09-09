@@ -133,7 +133,7 @@ async function extractFromPrompt({
 
   if (provider === 'ollama' && hasVision) {
     const err = new Error(
-      'Scanned PDF (no text layer) detected. Ollama cannot process PDF vision in this app — switch AI Provider to OpenAI in Settings, or use a text-based PDF.'
+      'Image/scanned file detected. Ollama cannot process vision in this app — switch AI Provider to OpenAI in Settings, or use a text-based PDF/DOCX/TXT.'
     );
     err.code = 'OLLAMA_SCANNED_PDF';
     throw err;
@@ -155,15 +155,10 @@ async function extractFromPrompt({
 
   let userContent;
   if (hasVision) {
+    const fileService = require('./file.service');
     userContent = [
       { type: 'text', text: textPrompt },
-      ...visionFiles.map((f) => ({
-        type: 'file',
-        file: {
-          filename: f.fileName || 'document.pdf',
-          file_data: `data:application/pdf;base64,${f.buffer.toString('base64')}`,
-        },
-      })),
+      ...visionFiles.map((f) => fileService.toVisionContentPart(f)),
     ];
   } else {
     userContent = textPrompt;
@@ -243,17 +238,26 @@ async function extractWithUploadedFiles(
   client,
   { model, temperature, maxTokens, systemPrompt, textPrompt, visionFiles }
 ) {
+  const fileService = require('./file.service');
   const uploadedIds = [];
   try {
     for (const f of visionFiles) {
+      const mime = f.mime || fileService.mimeFromExt(
+        String(f.fileName || '').split('.').pop()
+      );
+      if (String(mime).startsWith('image/') || f.kind === 'image') continue;
       const uploaded = await client.files.create({
         file: await OpenAI.toFile(f.buffer, f.fileName || 'document.pdf', {
-          type: 'application/pdf',
+          type: mime || 'application/pdf',
         }),
         purpose: 'user_data',
       });
       uploadedIds.push(uploaded.id);
     }
+
+    const imageParts = visionFiles
+      .filter((f) => String(f.mime || '').startsWith('image/') || f.kind === 'image')
+      .map((f) => fileService.toVisionContentPart(f));
 
     const content = [
       { type: 'text', text: textPrompt },
@@ -261,6 +265,7 @@ async function extractWithUploadedFiles(
         type: 'file',
         file: { file_id: id },
       })),
+      ...imageParts,
     ];
 
     return await client.chat.completions.create({

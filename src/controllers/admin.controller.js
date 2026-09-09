@@ -368,6 +368,11 @@ async function settingsUpdate(req, res) {
         if (key === 'ai_provider') {
           value = String(value).toLowerCase() === 'ollama' ? 'ollama' : 'openai';
         }
+        if (key === 'allowed_file_types') {
+          const fileService = require('../services/file.service');
+          const list = fileService.normalizeAllowedTypes(value);
+          value = list.length ? list.join(',') : 'pdf,docx,txt';
+        }
         await db.setSetting(key, value);
       }
     }
@@ -541,6 +546,16 @@ async function chatPage(req, res, next) {
       provider === 'ollama'
         ? settings.ollama_model || '-'
         : settings.openai_model || '-';
+    const fileService = require('../services/file.service');
+    const allowedTypes = await fileService.getAllowedExtensions();
+    const acceptAttr = allowedTypes
+      .map((ext) => `.${ext}`)
+      .concat(
+        allowedTypes.includes('pdf') ? ['application/pdf'] : [],
+        allowedTypes.some((e) => ['jpg', 'jpeg'].includes(e)) ? ['image/jpeg'] : [],
+        allowedTypes.includes('png') ? ['image/png'] : []
+      )
+      .join(',');
     return res.render(
       'admin/chat/index',
       pageLocals(req, {
@@ -548,6 +563,8 @@ async function chatPage(req, res, next) {
         pageTitle: 'AI Chat',
         provider,
         model,
+        allowedTypes,
+        acceptAttr: acceptAttr || '.pdf,.docx,.txt',
       })
     );
   } catch (err) {

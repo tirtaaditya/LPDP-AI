@@ -35,12 +35,14 @@ async function processChatUploads(files = []) {
       });
       if (extracted.needsVision) {
         visionFiles.push({
-          fileName: file.originalname || 'document.pdf',
-          mime: 'application/pdf',
+          fileName: file.originalname || 'file',
+          mime: extracted.mime || fileService.mimeFromExt(ext),
           buffer: extracted.buffer || buffer,
+          kind: extracted.kind || (fileService.isImageExt(ext) ? 'image' : 'pdf'),
         });
+        const label = fileService.isImageExt(ext) ? 'image' : 'scanned PDF';
         textParts.push(
-          `--- FILE (scanned PDF): ${file.originalname} ---\n[Attached for AI vision reading]`
+          `--- FILE (${label}): ${file.originalname} ---\n[Attached for AI vision reading]`
         );
       } else if (extracted.text) {
         textParts.push(
@@ -66,7 +68,7 @@ async function chat({ message, history = [], fileText = '', visionFiles = [] }) 
 
   if (provider === 'ollama' && hasVision) {
     const err = new Error(
-      'Scanned PDF detected. Switch AI Provider to OpenAI in Settings for vision chat, or use a text PDF/DOCX/TXT.'
+      'Image/scanned file detected. Switch AI Provider to OpenAI in Settings for vision chat, or use text PDF/DOCX/TXT.'
     );
     err.code = 'OLLAMA_SCANNED_PDF';
     throw err;
@@ -100,7 +102,7 @@ async function chat({ message, history = [], fileText = '', visionFiles = [] }) 
     String(message || '').trim(),
     fileText ? `\n\n--- ATTACHED FILE CONTENT ---\n${fileText}` : '',
     hasVision
-      ? '\n\nAttached PDF(s) are scanned. Read them and answer based on their content.'
+      ? '\n\nAttached file(s) may include images or scanned PDFs. Read them and answer based on their content.'
       : '',
   ]
     .join('')
@@ -109,13 +111,7 @@ async function chat({ message, history = [], fileText = '', visionFiles = [] }) 
   if (hasVision) {
     userContent = [
       { type: 'text', text: textBody },
-      ...visionFiles.map((f) => ({
-        type: 'file',
-        file: {
-          filename: f.fileName || 'document.pdf',
-          file_data: `data:application/pdf;base64,${f.buffer.toString('base64')}`,
-        },
-      })),
+      ...visionFiles.map((f) => fileService.toVisionContentPart(f)),
     ];
   } else {
     userContent = textBody;
@@ -167,14 +163,25 @@ async function chatWithUploadedFiles(
   const uploadedIds = [];
   try {
     for (const f of visionFiles) {
+      const mime = f.mime || fileService.mimeFromExt(
+        path.extname(f.fileName || '').replace('.', '')
+      );
+      // Images: send as image_url in retry payload instead of Files API
+      if (String(mime).startsWith('image/') || f.kind === 'image') {
+        continue;
+      }
       const uploaded = await client.files.create({
         file: await OpenAI.toFile(f.buffer, f.fileName || 'document.pdf', {
-          type: 'application/pdf',
+          type: mime || 'application/pdf',
         }),
         purpose: 'user_data',
       });
       uploadedIds.push(uploaded.id);
     }
+
+    const imageParts = visionFiles
+      .filter((f) => String(f.mime || '').startsWith('image/') || f.kind === 'image')
+      .map((f) => fileService.toVisionContentPart(f));
 
     const content = [
       { type: 'text', text: textBody },
@@ -182,6 +189,7 @@ async function chatWithUploadedFiles(
         type: 'file',
         file: { file_id: id },
       })),
+      ...imageParts,
     ];
 
     return await client.chat.completions.create({
