@@ -1,9 +1,10 @@
 const path = require('path');
 const dotenv = require('dotenv');
 
-// Always load .env from project root (works with PM2 even if cwd is wrong)
+// Always load .env from project root (works with PM2 even if cwd is wrong).
+// override: true so .env wins over empty/stale Windows or PM2 env vars.
 const projectRoot = path.resolve(__dirname, '..');
-dotenv.config({ path: path.join(projectRoot, '.env') });
+dotenv.config({ path: path.join(projectRoot, '.env'), override: true });
 
 function required(name, fallback) {
   const value = process.env[name] ?? fallback;
