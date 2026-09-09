@@ -2,16 +2,11 @@ const fs = require('fs');
 const path = require('path');
 const dotenv = require('dotenv');
 
-// Always load .env from project root (works with PM2 even if cwd is wrong).
 // __dirname = .../src/config → project root is two levels up
 const projectRoot = path.resolve(__dirname, '../..');
-const envPath = path.join(projectRoot, '.env');
 
 function loadEnvFile(filePath) {
-  if (!fs.existsSync(filePath)) {
-    console.warn(`[config] .env not found at ${filePath}`);
-    return;
-  }
+  if (!fs.existsSync(filePath)) return false;
 
   let buf = fs.readFileSync(filePath);
   // Strip UTF-8 BOM
@@ -22,7 +17,6 @@ function loadEnvFile(filePath) {
   if (buf.length >= 2 && buf[0] === 0xff && buf[1] === 0xfe) {
     buf = Buffer.from(buf.toString('utf16le').slice(1), 'utf8');
   } else if (buf.includes(0) && !buf.slice(0, 64).toString('utf8').includes('=')) {
-    // UTF-16 without BOM (null bytes between ASCII chars)
     buf = Buffer.from(buf.toString('utf16le'), 'utf8');
   }
 
@@ -30,9 +24,21 @@ function loadEnvFile(filePath) {
   for (const [key, value] of Object.entries(parsed)) {
     process.env[key] = String(value).trim();
   }
+  console.log(`[config] Loaded .env from ${filePath}`);
+  return true;
 }
 
-loadEnvFile(envPath);
+const envCandidates = [
+  path.join(projectRoot, '.env'),
+  path.join(process.cwd(), '.env'),
+  path.join(__dirname, '../../.env'),
+  path.join(__dirname, '../.env'),
+];
+
+const envPath = envCandidates.find((p) => fs.existsSync(p)) || envCandidates[0];
+if (!loadEnvFile(envPath)) {
+  console.warn(`[config] .env not found. Tried:\n  - ${envCandidates.join('\n  - ')}`);
+}
 
 function required(name, fallback) {
   const raw = process.env[name] ?? fallback;
@@ -44,6 +50,7 @@ function required(name, fallback) {
   }
   return value;
 }
+
 
 const config = {
   port: Number(process.env.PORT || 3000),
