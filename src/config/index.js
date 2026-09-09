@@ -1,7 +1,9 @@
 const path = require('path');
 const dotenv = require('dotenv');
 
-dotenv.config({ path: path.resolve(process.cwd(), '.env') });
+// Always load .env from project root (works with PM2 even if cwd is wrong)
+const projectRoot = path.resolve(__dirname, '..');
+dotenv.config({ path: path.join(projectRoot, '.env') });
 
 function required(name, fallback) {
   const value = process.env[name] ?? fallback;
@@ -18,7 +20,8 @@ const config = {
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || '1d',
   adminSessionSecret: required('ADMIN_SESSION_SECRET', 'change_this_admin_session_secret'),
   maxUploadMb: Number(process.env.MAX_UPLOAD_MB || 10),
-  uploadsDir: path.resolve(process.cwd(), 'uploads'),
+  uploadsDir: path.join(projectRoot, 'uploads'),
+  projectRoot,
   db: {
     server: required('DB_SERVER', '10.44.200.72'),
     user: required('DB_USER', 'sa'),

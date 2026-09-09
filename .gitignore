@@ -5,6 +5,7 @@ uploads/*
 data/*.db
 data/*.db-*
 *.log
+logs/
 .DS_Store
 Thumbs.db
 .vscode/

@@ -22,20 +22,7 @@ function createApp() {
   app.use(cookieParser());
   app.use(requestLogger);
 
-  app.get('/', (req, res) => {
-    res.json({
-      status: 'success',
-      data: {
-        name: 'AI LPDP JSON Extraction API',
-        docs: {
-          health: 'GET /api/v1/health',
-          login: 'POST /api/v1/auth/login',
-          extract: 'POST /api/v1/extract',
-          admin: 'GET /admin/login',
-        },
-      },
-    });
-  });
+  app.get('/', (req, res) => res.redirect('/admin'));
 
   app.use('/api/v1', apiRoutes);
   app.use('/admin', adminRoutes);
