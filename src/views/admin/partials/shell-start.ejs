@@ -12,56 +12,57 @@
 </head>
 <body class="app-body">
   <div class="app-root">
-    <aside class="aside">
+    <div class="sidebar-backdrop" id="sidebar-backdrop" hidden></div>
+    <aside class="aside" id="app-aside">
       <div class="aside-brand">
         <div class="logo">AI</div>
-        <div>
+        <div class="aside-brand-text">
           <div class="title">LPDP AI</div>
           <div class="subtitle">Neural Console</div>
         </div>
       </div>
-      <div class="aside-status">
+      <div class="aside-status" title="System online">
         <span class="ai-pulse"></span>
-        <span>SYSTEM ONLINE</span>
+        <span class="aside-status-text">SYSTEM ONLINE</span>
       </div>
       <ul class="aside-menu">
         <li class="menu-section">Main</li>
         <li>
-          <a href="/admin" class="<%= activeMenu === 'dashboard' ? 'active' : '' %>">
-            <i class="bi bi-grid-1x2-fill"></i> Dashboard
+          <a href="/admin" class="<%= activeMenu === 'dashboard' ? 'active' : '' %>" title="Dashboard">
+            <i class="bi bi-grid-1x2-fill"></i><span>Dashboard</span>
           </a>
         </li>
         <li>
-          <a href="/admin/chat" class="<%= activeMenu === 'chat' ? 'active' : '' %>">
-            <i class="bi bi-chat-dots-fill"></i> AI Chat
+          <a href="/admin/chat" class="<%= activeMenu === 'chat' ? 'active' : '' %>" title="AI Chat">
+            <i class="bi bi-chat-dots-fill"></i><span>AI Chat</span>
           </a>
         </li>
         <li class="menu-section">Access</li>
         <li>
-          <a href="/admin/users" class="<%= activeMenu === 'users' ? 'active' : '' %>">
-            <i class="bi bi-people-fill"></i> Users
+          <a href="/admin/users" class="<%= activeMenu === 'users' ? 'active' : '' %>" title="Users">
+            <i class="bi bi-people-fill"></i><span>Users</span>
           </a>
         </li>
         <li>
-          <a href="/admin/whitelist" class="<%= activeMenu === 'whitelist' ? 'active' : '' %>">
-            <i class="bi bi-shield-lock-fill"></i> IP Whitelist
+          <a href="/admin/whitelist" class="<%= activeMenu === 'whitelist' ? 'active' : '' %>" title="IP Whitelist">
+            <i class="bi bi-shield-lock-fill"></i><span>IP Whitelist</span>
           </a>
         </li>
         <li>
-          <a href="/admin/tokens" class="<%= activeMenu === 'tokens' ? 'active' : '' %>">
-            <i class="bi bi-key-fill"></i> API Tokens
+          <a href="/admin/tokens" class="<%= activeMenu === 'tokens' ? 'active' : '' %>" title="API Tokens">
+            <i class="bi bi-key-fill"></i><span>API Tokens</span>
           </a>
         </li>
         <li class="menu-section">Monitoring</li>
         <li>
-          <a href="/admin/logs" class="<%= activeMenu === 'logs' ? 'active' : '' %>">
-            <i class="bi bi-journal-text"></i> AI Logs
+          <a href="/admin/logs" class="<%= activeMenu === 'logs' ? 'active' : '' %>" title="AI Logs">
+            <i class="bi bi-journal-text"></i><span>AI Logs</span>
           </a>
         </li>
         <li class="menu-section">System</li>
         <li>
-          <a href="/admin/settings" class="<%= activeMenu === 'settings' ? 'active' : '' %>">
-            <i class="bi bi-gear-fill"></i> Settings
+          <a href="/admin/settings" class="<%= activeMenu === 'settings' ? 'active' : '' %>" title="Settings">
+            <i class="bi bi-gear-fill"></i><span>Settings</span>
           </a>
         </li>
       </ul>
@@ -73,8 +74,13 @@
     <div class="wrapper">
       <header class="header">
         <div class="header-left">
-          <p class="header-kicker">// admin module</p>
-          <h1><%= pageTitle %></h1>
+          <button type="button" class="sidebar-toggle" id="sidebar-toggle" title="Collapse / expand sidebar" aria-label="Toggle sidebar" aria-controls="app-aside" aria-expanded="true">
+            <i class="bi bi-layout-sidebar-inset"></i>
+          </button>
+          <div>
+            <p class="header-kicker">// admin module</p>
+            <h1><%= pageTitle %></h1>
+          </div>
         </div>
         <div class="user-chip">
           <div class="user-avatar"><i class="bi bi-cpu"></i></div>
@@ -82,6 +88,9 @@
             <span class="user-label">Operator</span>
             <span class="user-name"><%= admin.sub %></span>
           </div>
+          <a class="btn btn-sm btn-light-primary" href="/admin/account/password" title="Change password">
+            <i class="bi bi-key"></i>
+          </a>
           <form method="post" action="/admin/logout" class="d-inline">
             <button class="btn btn-sm btn-light-danger" type="submit">Logout</button>
           </form>

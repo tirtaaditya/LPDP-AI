@@ -1,12 +1,91 @@
       </main>
     </div>
   </div>
+
+  <div id="ai-loader" class="ai-loader" hidden aria-hidden="true">
+    <div class="ai-loader-panel">
+      <div class="ai-loader-orbits" aria-hidden="true">
+        <span class="ring ring-a"></span>
+        <span class="ring ring-b"></span>
+        <span class="ring ring-c"></span>
+        <span class="core"></span>
+      </div>
+      <div class="ai-loader-copy">
+        <p class="ai-loader-kicker">lpdp-ai · runtime</p>
+        <p class="ai-loader-title" id="ai-loader-title">Thinking…</p>
+        <p class="ai-loader-sub" id="ai-loader-sub">Neural pipeline is running</p>
+        <div class="ai-loader-bars" aria-hidden="true">
+          <i></i><i></i><i></i><i></i><i></i>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
   <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
   <script src="https://cdn.datatables.net/1.13.8/js/jquery.dataTables.min.js"></script>
   <script src="https://cdn.datatables.net/1.13.8/js/dataTables.bootstrap5.min.js"></script>
   <script>
     (function () {
+      var KEY = 'lpdp-sidebar-collapsed';
+      var LEGACY_KEY = 'lpdp-sidebar-hidden';
+      var root = document.body;
+      var toggleBtn = document.getElementById('sidebar-toggle');
+      var backdrop = document.getElementById('sidebar-backdrop');
+      var mq = window.matchMedia('(max-width: 991px)');
+
+      function isMobile() { return mq.matches; }
+
+      function readCollapsed() {
+        var v = localStorage.getItem(KEY);
+        if (v === null && localStorage.getItem(LEGACY_KEY) !== null) {
+          v = localStorage.getItem(LEGACY_KEY);
+          localStorage.setItem(KEY, v);
+          localStorage.removeItem(LEGACY_KEY);
+        }
+        return v === '1';
+      }
+
+      function setExpanded(expanded) {
+        if (!toggleBtn) return;
+        toggleBtn.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+        toggleBtn.title = expanded ? 'Collapse sidebar' : 'Expand sidebar';
+        var icon = toggleBtn.querySelector('i');
+        if (icon) {
+          icon.className = expanded ? 'bi bi-layout-sidebar-inset' : 'bi bi-layout-sidebar';
+        }
+      }
+
+      function applyState() {
+        var collapsed = readCollapsed();
+        // Desktop: icon rail. Mobile: fully hidden unless opened.
+        root.classList.toggle('sidebar-collapsed', collapsed && !isMobile());
+        root.classList.toggle('sidebar-open', !collapsed && isMobile());
+        if (backdrop) backdrop.hidden = !(isMobile() && !collapsed);
+        setExpanded(!collapsed);
+      }
+
+      function setCollapsed(collapsed) {
+        localStorage.setItem(KEY, collapsed ? '1' : '0');
+        applyState();
+      }
+
+      function toggle() {
+        var currentlyCollapsed = isMobile()
+          ? !root.classList.contains('sidebar-open')
+          : root.classList.contains('sidebar-collapsed');
+        setCollapsed(!currentlyCollapsed);
+      }
+
+      if (localStorage.getItem(KEY) === null && localStorage.getItem(LEGACY_KEY) === null && isMobile()) {
+        localStorage.setItem(KEY, '1');
+      }
+      applyState();
+
+      if (toggleBtn) toggleBtn.addEventListener('click', toggle);
+      if (backdrop) backdrop.addEventListener('click', function () { setCollapsed(true); });
+      mq.addEventListener('change', applyState);
+
       var common = {
         pageLength: 10,
         lengthMenu: [10, 25, 50, 100],
@@ -47,6 +126,81 @@
           ]
         }));
       }
+    })();
+  </script>
+  <script>
+    (function () {
+      var el = document.getElementById('ai-loader');
+      var titleEl = document.getElementById('ai-loader-title');
+      var subEl = document.getElementById('ai-loader-sub');
+      var depth = 0;
+
+      function show(title, sub) {
+        if (!el) return;
+        depth += 1;
+        if (titleEl) titleEl.textContent = title || 'Thinking…';
+        if (subEl) subEl.textContent = sub || 'Neural pipeline is running';
+        el.hidden = false;
+        el.setAttribute('aria-hidden', 'false');
+        document.body.classList.add('ai-loading');
+      }
+
+      function hide() {
+        if (!el) return;
+        depth = Math.max(0, depth - 1);
+        if (depth > 0) return;
+        el.hidden = true;
+        el.setAttribute('aria-hidden', 'true');
+        document.body.classList.remove('ai-loading');
+      }
+
+      function forceHide() {
+        depth = 0;
+        hide();
+      }
+
+      window.AiLoader = { show: show, hide: hide, forceHide: forceHide };
+
+      document.addEventListener('submit', function (e) {
+        var form = e.target;
+        if (!form || form.tagName !== 'FORM') return;
+        if (form.dataset.aiLoader === 'off') return;
+        if (form.method && form.method.toLowerCase() === 'get') return;
+        // Skip chat form — has its own loader UX
+        if (form.id === 'chat-form') return;
+        show(
+          form.dataset.aiLoaderTitle || 'Processing…',
+          form.dataset.aiLoaderSub || 'Synchronizing with LPDP AI runtime'
+        );
+      }, true);
+
+      document.addEventListener('click', function (e) {
+        var link = e.target.closest('a[href]');
+        if (!link) return;
+        if (e.defaultPrevented) return;
+        if (e.button !== 0) return;
+        if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+        if (link.target && link.target !== '_self') return;
+        if (link.hasAttribute('download')) return;
+        if (link.dataset.aiLoader === 'off') return;
+
+        var href = link.getAttribute('href');
+        if (!href || href.charAt(0) === '#' || href.indexOf('javascript:') === 0) return;
+
+        var url;
+        try { url = new URL(link.href, window.location.href); }
+        catch (_) { return; }
+        if (url.origin !== window.location.origin) return;
+        if (url.pathname.indexOf('/admin') !== 0) return;
+        // same page hash-only / identical URL
+        if (url.pathname === window.location.pathname && url.search === window.location.search) return;
+
+        var label = (link.getAttribute('title') || link.textContent || 'module').replace(/\s+/g, ' ').trim();
+        show('Loading ' + label + '…', 'Routing neural console module');
+      }, true);
+
+      window.addEventListener('pageshow', function () { forceHide(); });
+      window.addEventListener('pagehide', function () { /* keep overlay until unload */ });
     })();
   </script>
 </body>

@@ -81,6 +81,9 @@ router.post('/tokens/:id/delete', requireAdminSession, adminController.tokensDel
 router.get('/settings', requireAdminSession, adminController.settingsPage);
 router.post('/settings', requireAdminSession, adminController.settingsUpdate);
 
+router.get('/account/password', requireAdminSession, adminController.changePasswordPage);
+router.post('/account/password', requireAdminSession, adminController.changePassword);
+
 router.get('/logs', requireAdminSession, adminController.logsList);
 router.get('/logs/data', requireAdminSession, adminController.logsData);
 router.get('/logs/:id', requireAdminSession, adminController.logsDetail);

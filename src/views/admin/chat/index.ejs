@@ -14,7 +14,7 @@
 
   <div id="chat-messages" class="chat-messages">
     <div class="chat-bubble assistant">
-      Halo! Saya asisten AI LPDP. Kirim pertanyaan, boleh lampirkan file PDF/DOCX/TXT.
+      Halo! Saya asisten AI LPDP. Ada yang ingin kamu tanyakan?
     </div>
   </div>
 
@@ -30,47 +30,85 @@
       <i class="bi bi-send-fill"></i>
     </button>
   </form>
+  <button type="button" id="chat-jump" class="chat-jump" title="Scroll to latest">
+    <i class="bi bi-arrow-down"></i> Latest
+  </button>
 </div>
 
 <style>
   .content:has(.chat-shell) {
     display: flex;
     flex-direction: column;
-    min-height: calc(100vh - 86px);
+    height: calc(100vh - 74px);
+    min-height: 0;
+    overflow: hidden;
+    padding-bottom: 16px;
   }
   .chat-shell {
+    position: relative;
     flex: 1;
     display: flex;
     flex-direction: column;
-    min-height: calc(100vh - 150px);
+    min-height: 0;
+    height: 100%;
     overflow: hidden;
   }
   .chat-toolbar {
+    flex: 0 0 auto;
     display: flex;
     justify-content: space-between;
     align-items: center;
     gap: 12px;
-    padding: 16px 18px;
+    padding: 14px 18px;
     border-bottom: 1px solid var(--card-border);
     background: #fff;
   }
   .chat-messages {
-    flex: 1;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-x: hidden;
     overflow-y: auto;
-    padding: 20px 18px;
+    padding: 18px;
+    scroll-behavior: smooth;
     background:
       radial-gradient(circle at 12% 0%, rgba(34, 211, 238, 0.08), transparent 42%),
       #f8fafc;
   }
+  .chat-messages::-webkit-scrollbar {
+    width: 8px;
+  }
+  .chat-messages::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 999px;
+  }
+  .chat-messages::-webkit-scrollbar-track {
+    background: transparent;
+  }
   .chat-bubble {
+    position: relative;
     max-width: min(720px, 92%);
     padding: 12px 14px;
     border-radius: 14px;
     margin-bottom: 12px;
     white-space: pre-wrap;
+    overflow-wrap: anywhere;
     word-break: break-word;
     line-height: 1.5;
     font-size: 0.95rem;
+  }
+  .chat-bubble.is-collapsed {
+    max-height: 240px;
+    overflow: hidden;
+  }
+  .chat-bubble.is-collapsed::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 64px;
+    pointer-events: none;
+    border-radius: 0 0 14px 14px;
   }
   .chat-bubble.user {
     margin-left: auto;
@@ -79,6 +117,9 @@
     font-weight: 550;
     border-bottom-right-radius: 4px;
   }
+  .chat-bubble.user.is-collapsed::after {
+    background: linear-gradient(transparent, #14b8c8);
+  }
   .chat-bubble.assistant {
     margin-right: auto;
     background: #fff;
@@ -86,11 +127,36 @@
     border-bottom-left-radius: 4px;
     color: #334155;
   }
+  .chat-bubble.assistant.is-collapsed::after {
+    background: linear-gradient(transparent, #fff);
+  }
   .chat-bubble.system-error {
     margin-right: auto;
     background: #fff1f2;
     border: 1px solid #fecdd3;
     color: #be123c;
+  }
+  .chat-bubble.system-error.is-collapsed::after {
+    background: linear-gradient(transparent, #fff1f2);
+  }
+  .chat-expand {
+    position: relative;
+    z-index: 1;
+    display: inline-flex;
+    margin-top: 10px;
+    border: 0;
+    border-radius: 999px;
+    padding: 4px 10px;
+    font: inherit;
+    font-size: 0.75rem;
+    font-weight: 700;
+    cursor: pointer;
+    background: rgba(15, 23, 42, 0.06);
+    color: #0f172a;
+  }
+  .chat-bubble.user .chat-expand {
+    background: rgba(2, 16, 24, 0.12);
+    color: #021018;
   }
   .chat-meta {
     display: block;
@@ -100,10 +166,13 @@
     font-family: "JetBrains Mono", ui-monospace, monospace;
   }
   .chat-file-preview {
+    flex: 0 0 auto;
     padding: 8px 18px 0;
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
+    max-height: 72px;
+    overflow-y: auto;
   }
   .chat-file-chip {
     background: #ecfeff;
@@ -115,6 +184,7 @@
     font-weight: 600;
   }
   .chat-composer {
+    flex: 0 0 auto;
     display: flex;
     align-items: flex-end;
     gap: 10px;
@@ -126,7 +196,7 @@
     flex: 1;
     resize: none;
     min-height: 44px;
-    max-height: 160px;
+    max-height: 120px;
     border: 1px solid #dbe3ee;
     border-radius: 12px;
     padding: 10px 12px;
@@ -146,6 +216,7 @@
     place-items: center;
     border-radius: 12px;
     cursor: pointer;
+    flex: 0 0 auto;
   }
   #chat-send {
     width: 44px;
@@ -153,12 +224,34 @@
     border-radius: 12px;
     display: grid;
     place-items: center;
+    flex: 0 0 auto;
   }
   .chat-typing {
     font-size: 0.85rem;
     color: #64748b;
     margin-bottom: 8px;
     font-family: "JetBrains Mono", ui-monospace, monospace;
+  }
+  .chat-jump {
+    position: absolute;
+    right: 28px;
+    bottom: 92px;
+    z-index: 5;
+    display: none;
+    border: 1px solid #a5f3fc;
+    border-radius: 999px;
+    padding: 8px 12px;
+    background: #fff;
+    color: #0e7490;
+    font-size: 0.78rem;
+    font-weight: 700;
+    box-shadow: 0 8px 20px rgba(15, 23, 42, 0.12);
+    cursor: pointer;
+  }
+  .chat-jump.is-visible {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
   }
 </style>
 
@@ -171,13 +264,38 @@
   const preview = document.getElementById('chat-file-preview');
   const sendBtn = document.getElementById('chat-send');
   const clearBtn = document.getElementById('btn-clear-chat');
+  const jumpBtn = document.getElementById('chat-jump');
 
   let history = [];
   let pendingFiles = [];
 
+  function nearBottom() {
+    return messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight < 80;
+  }
+
+  function scrollToBottom(force) {
+    if (force || nearBottom()) {
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+    }
+    updateJump();
+  }
+
+  function updateJump() {
+    if (!jumpBtn) return;
+    jumpBtn.classList.toggle('is-visible', !nearBottom());
+  }
+
+  messagesEl.addEventListener('scroll', updateJump);
+  if (jumpBtn) {
+    jumpBtn.addEventListener('click', function () {
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+      updateJump();
+    });
+  }
+
   function autoGrow() {
     input.style.height = 'auto';
-    input.style.height = Math.min(input.scrollHeight, 160) + 'px';
+    input.style.height = Math.min(input.scrollHeight, 120) + 'px';
   }
   input.addEventListener('input', autoGrow);
 
@@ -207,18 +325,41 @@
       .replace(/"/g, '&quot;');
   }
 
+  function isLongText(text) {
+    const t = String(text || '');
+    return t.length > 900 || t.split('\n').length > 16;
+  }
+
   function appendBubble(role, text, meta) {
     const div = document.createElement('div');
     div.className = 'chat-bubble ' + role;
-    div.textContent = text;
+    const body = document.createElement('div');
+    body.className = 'chat-bubble-body';
+    body.textContent = text;
+    div.appendChild(body);
+
     if (meta) {
       const m = document.createElement('span');
       m.className = 'chat-meta';
       m.textContent = meta;
       div.appendChild(m);
     }
+
+    if (isLongText(text)) {
+      div.classList.add('is-collapsed');
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'chat-expand';
+      btn.textContent = 'Show more';
+      btn.addEventListener('click', function () {
+        const collapsed = div.classList.toggle('is-collapsed');
+        btn.textContent = collapsed ? 'Show more' : 'Show less';
+      });
+      div.appendChild(btn);
+    }
+
     messagesEl.appendChild(div);
-    messagesEl.scrollTop = messagesEl.scrollHeight;
+    scrollToBottom(true);
   }
 
   clearBtn.addEventListener('click', function () {
@@ -262,11 +403,11 @@
     sendBtn.disabled = true;
 
     const typing = document.createElement('div');
-    typing.className = 'chat-typing';
+    typing.className = 'chat-typing ai-think';
     typing.id = 'chat-typing';
-    typing.textContent = 'AI sedang menulis…';
+    typing.innerHTML = '<span>Model inferencing</span><span class="dots"><span></span><span></span><span></span></span>';
     messagesEl.appendChild(typing);
-    messagesEl.scrollTop = messagesEl.scrollHeight;
+    scrollToBottom(true);
 
     try {
       const res = await fetch('/admin/chat/message', {

@@ -615,6 +615,54 @@ async function chatMessage(req, res) {
   }
 }
 
+/* ===================== ACCOUNT ===================== */
+function changePasswordPage(req, res) {
+  return res.render(
+    'admin/account/password',
+    pageLocals(req, {
+      activeMenu: 'password',
+      pageTitle: 'Change Password',
+    })
+  );
+}
+
+async function changePassword(req, res) {
+  const { current_password, new_password, confirm_password } = req.body || {};
+  const redirectTo = '/admin/account/password';
+
+  if (!current_password || !new_password || !confirm_password) {
+    return flashRedirect(res, redirectTo, 'error', 'Semua field wajib diisi');
+  }
+  if (String(new_password).length < 8) {
+    return flashRedirect(res, redirectTo, 'error', 'Password baru minimal 8 karakter');
+  }
+  if (String(new_password) !== String(confirm_password)) {
+    return flashRedirect(res, redirectTo, 'error', 'Konfirmasi password tidak cocok');
+  }
+  if (String(current_password) === String(new_password)) {
+    return flashRedirect(res, redirectTo, 'error', 'Password baru harus berbeda dari password lama');
+  }
+
+  try {
+    const userId = req.admin.uid;
+    const user = await db.findUserById(userId);
+    if (!user || user.role !== 'admin' || !user.is_active) {
+      return flashRedirect(res, redirectTo, 'error', 'Akun admin tidak valid');
+    }
+
+    const bcrypt = require('bcryptjs');
+    const ok = bcrypt.compareSync(String(current_password), user.password_hash);
+    if (!ok) {
+      return flashRedirect(res, redirectTo, 'error', 'Password saat ini salah');
+    }
+
+    await db.updateUserPassword(userId, String(new_password));
+    return flashRedirect(res, redirectTo, 'flash', 'Password berhasil diganti');
+  } catch (err) {
+    return flashRedirect(res, redirectTo, 'error', err.message || 'Gagal ganti password');
+  }
+}
+
 module.exports = {
   renderLogin,
   postLogin,
@@ -639,6 +687,8 @@ module.exports = {
   tokensDelete,
   settingsPage,
   settingsUpdate,
+  changePasswordPage,
+  changePassword,
   logsList,
   logsData,
   logsDetail,
