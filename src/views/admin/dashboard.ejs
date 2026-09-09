@@ -1,5 +1,17 @@
 <%- include('partials/shell-start') %>
 
+<div class="dash-hero">
+  <div>
+    <p class="dash-kicker">intelligence overview</p>
+    <h2 class="dash-title">Control Plane</h2>
+    <p class="dash-sub">Status akses, provider, dan kapasitas sistem AI LPDP.</p>
+  </div>
+  <div class="dash-live">
+    <span class="ai-pulse"></span>
+    Live telemetry
+  </div>
+</div>
+
 <div class="stat-grid">
   <div class="stat-card">
     <div class="icon bg-primary-soft"><i class="bi bi-people-fill"></i></div>
@@ -25,33 +37,35 @@
 
 <div class="card-panel">
   <div class="card-header-bar">
-    <h2>Quick info</h2>
+    <h2>Runtime Config</h2>
+    <span class="ai-chip">synced</span>
   </div>
   <div class="card-body-pad">
-    <div class="row g-3">
-      <div class="col-md-4">
-        <div class="text-muted small fw-semibold">AI Provider</div>
-        <div class="fs-5 fw-bold text-uppercase"><%= settings.ai_provider || 'openai' %></div>
+    <div class="runtime-grid">
+      <div class="runtime-item">
+        <div class="runtime-label">AI Provider</div>
+        <div class="runtime-value text-uppercase"><%= settings.ai_provider || 'openai' %></div>
       </div>
-      <div class="col-md-4">
-        <div class="text-muted small fw-semibold">Model</div>
-        <div class="fs-5 fw-bold">
+      <div class="runtime-item">
+        <div class="runtime-label">Model</div>
+        <div class="runtime-value">
           <%= (settings.ai_provider === 'ollama'
                 ? (settings.ollama_model || '-')
                 : (settings.openai_model || '-')) %>
         </div>
       </div>
-      <div class="col-md-2">
-        <div class="text-muted small fw-semibold">IP Whitelist</div>
-        <div class="fs-5 fw-bold"><%= settings.ip_whitelist_enabled === 'true' ? 'Enabled' : 'Disabled' %></div>
+      <div class="runtime-item">
+        <div class="runtime-label">IP Whitelist</div>
+        <div class="runtime-value"><%= settings.ip_whitelist_enabled === 'true' ? 'Enabled' : 'Disabled' %></div>
       </div>
-      <div class="col-md-2">
-        <div class="text-muted small fw-semibold">Max Upload</div>
-        <div class="fs-5 fw-bold"><%= settings.max_upload_mb || '-' %> MB</div>
+      <div class="runtime-item">
+        <div class="runtime-label">Max Upload</div>
+        <div class="runtime-value"><%= settings.max_upload_mb || '-' %> MB</div>
       </div>
     </div>
-    <hr />
-    <p class="mb-0 text-muted">Use the sidebar to manage <strong>Users</strong>, <strong>IP Whitelist</strong>, <strong>API Tokens</strong>, and <strong>Settings</strong>.</p>
+    <p class="runtime-hint mb-0">
+      Gunakan sidebar untuk manage <strong>Users</strong>, <strong>IP Whitelist</strong>, <strong>API Tokens</strong>, dan <strong>Settings</strong>.
+    </p>
   </div>
 </div>
 

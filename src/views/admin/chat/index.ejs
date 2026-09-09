@@ -36,13 +36,13 @@
   .content:has(.chat-shell) {
     display: flex;
     flex-direction: column;
-    min-height: calc(100vh - 74px);
+    min-height: calc(100vh - 86px);
   }
   .chat-shell {
     flex: 1;
     display: flex;
     flex-direction: column;
-    min-height: calc(100vh - 140px);
+    min-height: calc(100vh - 150px);
     overflow: hidden;
   }
   .chat-toolbar {
@@ -52,14 +52,15 @@
     gap: 12px;
     padding: 16px 18px;
     border-bottom: 1px solid var(--card-border);
+    background: #fff;
   }
   .chat-messages {
     flex: 1;
     overflow-y: auto;
     padding: 20px 18px;
     background:
-      radial-gradient(circle at 10% 0%, rgba(0,158,247,0.06), transparent 40%),
-      #fbfcfd;
+      radial-gradient(circle at 12% 0%, rgba(34, 211, 238, 0.08), transparent 42%),
+      #f8fafc;
   }
   .chat-bubble {
     max-width: min(720px, 92%);
@@ -73,8 +74,9 @@
   }
   .chat-bubble.user {
     margin-left: auto;
-    background: #009ef7;
-    color: #fff;
+    background: linear-gradient(135deg, #0891b2, #22d3ee);
+    color: #021018;
+    font-weight: 550;
     border-bottom-right-radius: 4px;
   }
   .chat-bubble.assistant {
@@ -82,19 +84,20 @@
     background: #fff;
     border: 1px solid var(--card-border);
     border-bottom-left-radius: 4px;
-    color: #3f4254;
+    color: #334155;
   }
   .chat-bubble.system-error {
     margin-right: auto;
-    background: #fff5f8;
-    border: 1px solid #ffcce0;
-    color: #f1416c;
+    background: #fff1f2;
+    border: 1px solid #fecdd3;
+    color: #be123c;
   }
   .chat-meta {
     display: block;
     margin-top: 6px;
     font-size: 0.75rem;
-    opacity: 0.8;
+    opacity: 0.75;
+    font-family: "JetBrains Mono", ui-monospace, monospace;
   }
   .chat-file-preview {
     padding: 8px 18px 0;
@@ -103,8 +106,9 @@
     gap: 8px;
   }
   .chat-file-chip {
-    background: #f1faff;
-    color: #009ef7;
+    background: #ecfeff;
+    color: #0e7490;
+    border: 1px solid #cffafe;
     border-radius: 999px;
     padding: 4px 10px;
     font-size: 0.8rem;
@@ -123,15 +127,17 @@
     resize: none;
     min-height: 44px;
     max-height: 160px;
-    border: 1px solid #e4e6ef;
+    border: 1px solid #dbe3ee;
     border-radius: 12px;
     padding: 10px 12px;
     font: inherit;
+    background: #fff;
+    color: #0f172a;
   }
   .chat-composer textarea:focus {
     outline: none;
-    border-color: #009ef7;
-    box-shadow: 0 0 0 0.15rem rgba(0,158,247,0.15);
+    border-color: #22d3ee;
+    box-shadow: 0 0 0 0.15rem rgba(34, 211, 238, 0.15);
   }
   .chat-attach {
     width: 44px;
@@ -150,8 +156,9 @@
   }
   .chat-typing {
     font-size: 0.85rem;
-    color: #a1a5b7;
+    color: #64748b;
     margin-bottom: 8px;
+    font-family: "JetBrains Mono", ui-monospace, monospace;
   }
 </style>
 
