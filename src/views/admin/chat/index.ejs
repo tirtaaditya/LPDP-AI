@@ -1,0 +1,302 @@
+<%- include('../partials/shell-start') %>
+
+<div class="chat-shell card-panel">
+  <div class="chat-toolbar">
+    <div>
+      <div class="fw-bold">AI Chat</div>
+      <div class="small text-muted">
+        Provider: <strong class="text-uppercase"><%= provider %></strong>
+        · Model: <strong><%= model %></strong>
+      </div>
+    </div>
+    <button type="button" id="btn-clear-chat" class="btn btn-sm btn-light-danger">Clear chat</button>
+  </div>
+
+  <div id="chat-messages" class="chat-messages">
+    <div class="chat-bubble assistant">
+      Halo! Saya asisten AI LPDP. Kirim pertanyaan, boleh lampirkan file PDF/DOCX/TXT.
+    </div>
+  </div>
+
+  <div id="chat-file-preview" class="chat-file-preview d-none"></div>
+
+  <form id="chat-form" class="chat-composer">
+    <label class="chat-attach btn btn-light-primary mb-0" title="Attach files">
+      <i class="bi bi-paperclip"></i>
+      <input type="file" id="chat-files" name="files" multiple accept=".pdf,.docx,.txt,application/pdf" hidden />
+    </label>
+    <textarea id="chat-input" rows="1" placeholder="Tulis pesan... (Enter kirim, Shift+Enter baris baru)" required></textarea>
+    <button type="submit" id="chat-send" class="btn btn-primary">
+      <i class="bi bi-send-fill"></i>
+    </button>
+  </form>
+</div>
+
+<style>
+  .content:has(.chat-shell) {
+    display: flex;
+    flex-direction: column;
+    min-height: calc(100vh - 74px);
+  }
+  .chat-shell {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: calc(100vh - 140px);
+    overflow: hidden;
+  }
+  .chat-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    padding: 16px 18px;
+    border-bottom: 1px solid var(--card-border);
+  }
+  .chat-messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px 18px;
+    background:
+      radial-gradient(circle at 10% 0%, rgba(0,158,247,0.06), transparent 40%),
+      #fbfcfd;
+  }
+  .chat-bubble {
+    max-width: min(720px, 92%);
+    padding: 12px 14px;
+    border-radius: 14px;
+    margin-bottom: 12px;
+    white-space: pre-wrap;
+    word-break: break-word;
+    line-height: 1.5;
+    font-size: 0.95rem;
+  }
+  .chat-bubble.user {
+    margin-left: auto;
+    background: #009ef7;
+    color: #fff;
+    border-bottom-right-radius: 4px;
+  }
+  .chat-bubble.assistant {
+    margin-right: auto;
+    background: #fff;
+    border: 1px solid var(--card-border);
+    border-bottom-left-radius: 4px;
+    color: #3f4254;
+  }
+  .chat-bubble.system-error {
+    margin-right: auto;
+    background: #fff5f8;
+    border: 1px solid #ffcce0;
+    color: #f1416c;
+  }
+  .chat-meta {
+    display: block;
+    margin-top: 6px;
+    font-size: 0.75rem;
+    opacity: 0.8;
+  }
+  .chat-file-preview {
+    padding: 8px 18px 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .chat-file-chip {
+    background: #f1faff;
+    color: #009ef7;
+    border-radius: 999px;
+    padding: 4px 10px;
+    font-size: 0.8rem;
+    font-weight: 600;
+  }
+  .chat-composer {
+    display: flex;
+    align-items: flex-end;
+    gap: 10px;
+    padding: 14px 18px 16px;
+    border-top: 1px solid var(--card-border);
+    background: #fff;
+  }
+  .chat-composer textarea {
+    flex: 1;
+    resize: none;
+    min-height: 44px;
+    max-height: 160px;
+    border: 1px solid #e4e6ef;
+    border-radius: 12px;
+    padding: 10px 12px;
+    font: inherit;
+  }
+  .chat-composer textarea:focus {
+    outline: none;
+    border-color: #009ef7;
+    box-shadow: 0 0 0 0.15rem rgba(0,158,247,0.15);
+  }
+  .chat-attach {
+    width: 44px;
+    height: 44px;
+    display: grid;
+    place-items: center;
+    border-radius: 12px;
+    cursor: pointer;
+  }
+  #chat-send {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    display: grid;
+    place-items: center;
+  }
+  .chat-typing {
+    font-size: 0.85rem;
+    color: #a1a5b7;
+    margin-bottom: 8px;
+  }
+</style>
+
+<script>
+(function () {
+  const messagesEl = document.getElementById('chat-messages');
+  const form = document.getElementById('chat-form');
+  const input = document.getElementById('chat-input');
+  const filesInput = document.getElementById('chat-files');
+  const preview = document.getElementById('chat-file-preview');
+  const sendBtn = document.getElementById('chat-send');
+  const clearBtn = document.getElementById('btn-clear-chat');
+
+  let history = [];
+  let pendingFiles = [];
+
+  function autoGrow() {
+    input.style.height = 'auto';
+    input.style.height = Math.min(input.scrollHeight, 160) + 'px';
+  }
+  input.addEventListener('input', autoGrow);
+
+  filesInput.addEventListener('change', function () {
+    pendingFiles = Array.from(filesInput.files || []);
+    renderPreview();
+  });
+
+  function renderPreview() {
+    if (!pendingFiles.length) {
+      preview.classList.add('d-none');
+      preview.innerHTML = '';
+      return;
+    }
+    preview.classList.remove('d-none');
+    preview.innerHTML = pendingFiles.map(function (f) {
+      return '<span class="chat-file-chip"><i class="bi bi-file-earmark"></i> ' +
+        escapeHtml(f.name) + '</span>';
+    }).join('');
+  }
+
+  function escapeHtml(str) {
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function appendBubble(role, text, meta) {
+    const div = document.createElement('div');
+    div.className = 'chat-bubble ' + role;
+    div.textContent = text;
+    if (meta) {
+      const m = document.createElement('span');
+      m.className = 'chat-meta';
+      m.textContent = meta;
+      div.appendChild(m);
+    }
+    messagesEl.appendChild(div);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+  }
+
+  clearBtn.addEventListener('click', function () {
+    history = [];
+    pendingFiles = [];
+    filesInput.value = '';
+    renderPreview();
+    messagesEl.innerHTML = '';
+    appendBubble('assistant', 'Chat dikosongkan. Silakan mulai percakapan baru.');
+  });
+
+  input.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      form.requestSubmit();
+    }
+  });
+
+  form.addEventListener('submit', async function (e) {
+    e.preventDefault();
+    const text = input.value.trim();
+    if (!text && !pendingFiles.length) return;
+
+    const fileNames = pendingFiles.map(function (f) { return f.name; });
+    const userLabel = text || '(file only)';
+    appendBubble(
+      'user',
+      userLabel + (fileNames.length ? '\n📎 ' + fileNames.join(', ') : '')
+    );
+
+    const fd = new FormData();
+    fd.append('message', text);
+    fd.append('history', JSON.stringify(history));
+    pendingFiles.forEach(function (f) { fd.append('files', f); });
+
+    input.value = '';
+    autoGrow();
+    pendingFiles = [];
+    filesInput.value = '';
+    renderPreview();
+    sendBtn.disabled = true;
+
+    const typing = document.createElement('div');
+    typing.className = 'chat-typing';
+    typing.id = 'chat-typing';
+    typing.textContent = 'AI sedang menulis…';
+    messagesEl.appendChild(typing);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+
+    try {
+      const res = await fetch('/admin/chat/message', {
+        method: 'POST',
+        body: fd,
+        credentials: 'same-origin'
+      });
+      const json = await res.json();
+      const typingEl = document.getElementById('chat-typing');
+      if (typingEl) typingEl.remove();
+
+      if (!res.ok || json.status !== 'success') {
+        appendBubble('system-error', json.message || 'Chat failed');
+        return;
+      }
+
+      const reply = json.data.reply || '';
+      const meta = json.data.meta || {};
+      appendBubble(
+        'assistant',
+        reply,
+        (meta.provider || '') + (meta.model ? ' · ' + meta.model : '')
+      );
+
+      history.push({ role: 'user', content: userLabel });
+      history.push({ role: 'assistant', content: reply });
+      if (history.length > 40) history = history.slice(-40);
+    } catch (err) {
+      const typingEl = document.getElementById('chat-typing');
+      if (typingEl) typingEl.remove();
+      appendBubble('system-error', err.message || 'Network error');
+    } finally {
+      sendBtn.disabled = false;
+      input.focus();
+    }
+  });
+})();
+</script>
+
+<%- include('../partials/shell-end') %>

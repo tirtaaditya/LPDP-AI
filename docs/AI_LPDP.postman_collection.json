@@ -1,0 +1,131 @@
+{
+  "info": {
+    "_postman_id": "a1lpdp-ai-json-extract-001",
+    "name": "AI LPDP",
+    "description": "AI LPDP — JSON Extraction API.\n\n1. Login API User (simpan access_token)\n2. Extract dengan prompt dan/atau file_urls (BE yang download file)\n\nDefault API user: api_user / Api@LPDP2026\nOpenAI key: Admin → Settings",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000" },
+    { "key": "access_token", "value": "" },
+    { "key": "api_username", "value": "api_user" },
+    { "key": "api_password", "value": "Api@LPDP2026" }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/health"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Login API User",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (json && json.data && json.data.access_token) {",
+                  "  pm.collectionVariables.set('access_token', json.data.access_token);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{api_username}}\",\n  \"password\": \"{{api_password}}\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/auth/login"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Extract",
+      "item": [
+        {
+          "name": "Extract — Prompt Only",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{access_token}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"prompt\": \"Tarik dalam bentuk JSON: judul_makalah, nama_pembuat, penerbit, instansi.\\n\\nTeks:\\nJudul: Inovasi Pendanaan Beasiswa LPDP\\nPembuat: Budi Santoso\\nPenerbit: Jurnal Pendidikan Indonesia\\nInstansi: Universitas Indonesia\",\n  \"schema_hint\": \"judul_makalah, nama_pembuat, penerbit, instansi\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/extract",
+            "description": "Extract tanpa file."
+          }
+        },
+        {
+          "name": "Extract — Prompt + File URLs (multi)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{access_token}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"prompt\": \"Ekstrak metadata makalah ke JSON: judul_makalah, nama_pembuat, penerbit, instansi dari semua file terlampir.\",\n  \"schema_hint\": \"judul_makalah, nama_pembuat, penerbit, instansi\",\n  \"file_urls\": [\n    \"https://example.com/path/makalah1.pdf\",\n    \"https://example.com/path/lampiran.docx\"\n  ]\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/extract",
+            "description": "Kirim array `file_urls`. Backend mendownload tiap link (max 10), ekstrak teks pdf/docx/txt, lalu kirim ke OpenAI.\n\nGanti URL contoh dengan link file yang bisa diakses publik/internal dari server."
+          }
+        },
+        {
+          "name": "Extract — Single file_url",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{access_token}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"prompt\": \"Ringkas isi dokumen ke JSON field: ringkasan, topik\",\n  \"file_url\": \"https://example.com/path/dokumen.pdf\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/extract"
+          }
+        },
+        {
+          "name": "Extract — With Static API Token",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "lpdp_PASTE_STATIC_TOKEN_HERE", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"prompt\": \"Tarik JSON: kategori, ringkasan dari teks: LPDP membuka beasiswa magister.\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/extract"
+          }
+        }
+      ]
+    }
+  ]
+}

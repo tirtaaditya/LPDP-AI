@@ -1,0 +1,128 @@
+<%- include('../partials/shell-start') %>
+
+<div class="mb-3">
+  <a href="/admin/logs" class="btn btn-sm btn-light">← Back to list</a>
+</div>
+
+<div class="row g-3">
+  <div class="col-lg-4">
+    <div class="card-panel h-100">
+      <div class="card-header-bar"><h2>Request info</h2></div>
+      <div class="card-body-pad small">
+        <div class="mb-2"><span class="text-muted">ID</span><div class="fw-bold">#<%= log.id %></div></div>
+        <div class="mb-2"><span class="text-muted">Time</span><div class="fw-bold"><%= log.created_at %></div></div>
+        <div class="mb-2"><span class="text-muted">Request ID</span><div><code><%= log.request_id || '-' %></code></div></div>
+        <div class="mb-2"><span class="text-muted">IP</span><div><%= log.ip || '-' %></div></div>
+        <div class="mb-2"><span class="text-muted">Duration</span><div><%= log.duration_ms != null ? log.duration_ms + ' ms' : '-' %></div></div>
+        <div class="mb-2"><span class="text-muted">HTTP</span><div><%= log.http_status || '-' %></div></div>
+        <div class="mb-2">
+          <span class="text-muted">Status</span>
+          <div>
+            <% if (log.response_status === 'success') { %>
+              <span class="badge text-bg-success">success</span>
+            <% } else { %>
+              <span class="badge text-bg-danger"><%= log.response_status || 'error' %></span>
+            <% } %>
+          </div>
+        </div>
+        <% if (log.error_message) { %>
+          <div class="mb-2"><span class="text-muted">Error</span><div class="text-danger"><%= log.error_message %></div></div>
+        <% } %>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-4">
+    <div class="card-panel h-100">
+      <div class="card-header-bar"><h2>Token / User</h2></div>
+      <div class="card-body-pad small">
+        <div class="mb-2"><span class="text-muted">Username</span><div class="fw-bold"><%= log.username || '-' %></div></div>
+        <div class="mb-2"><span class="text-muted">User ID</span><div><%= log.user_id != null ? log.user_id : '-' %></div></div>
+        <div class="mb-2"><span class="text-muted">Auth type</span><div class="fw-bold"><%= log.auth_type || '-' %></div></div>
+        <div class="mb-2"><span class="text-muted">Token name</span><div><%= log.token_name || (log.auth_type === 'jwt' ? 'JWT access token' : '-') %></div></div>
+        <div class="mb-2"><span class="text-muted">Token prefix</span><div><code><%= log.token_prefix ? (log.token_prefix + '...') : '-' %></code></div></div>
+        <div class="mb-2"><span class="text-muted">Model</span><div><%= log.model || '-' %></div></div>
+        <div class="mb-2"><span class="text-muted">Usage</span>
+          <div>
+            prompt: <%= log.prompt_tokens != null ? log.prompt_tokens : '-' %>,
+            completion: <%= log.completion_tokens != null ? log.completion_tokens : '-' %>,
+            total: <%= log.total_tokens != null ? log.total_tokens : '-' %>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-4">
+    <div class="card-panel h-100">
+      <div class="card-header-bar"><h2>File(s)</h2></div>
+      <div class="card-body-pad small">
+        <% if (log.has_file) { %>
+          <%
+            let fileInfo = null;
+            try { fileInfo = JSON.parse(log.file_name); } catch (e) { fileInfo = null; }
+          %>
+          <% if (fileInfo && (fileInfo.urls || fileInfo.files)) { %>
+            <div class="mb-2"><span class="text-muted">URLs</span>
+              <ul class="mb-0 ps-3">
+                <% (fileInfo.urls || []).forEach(function(u) { %>
+                  <li><a href="<%= u %>" target="_blank" rel="noopener"><%= u %></a></li>
+                <% }) %>
+              </ul>
+            </div>
+            <% if (fileInfo.files && fileInfo.files.length) { %>
+              <div class="mb-2"><span class="text-muted">Downloaded</span>
+                <ul class="mb-0 ps-3">
+                  <% fileInfo.files.forEach(function(f) { %>
+                    <li><%= f.file_name %> (<%= f.file_size %> bytes)</li>
+                  <% }) %>
+                </ul>
+              </div>
+            <% } %>
+          <% } else { %>
+            <div class="mb-2"><span class="text-muted">Name</span><div class="fw-bold"><%= log.file_name || '-' %></div></div>
+          <% } %>
+          <div class="mb-2"><span class="text-muted">Total size</span><div><%= log.file_size != null ? log.file_size + ' bytes' : '-' %></div></div>
+        <% } else { %>
+          <div class="text-muted">No file URL</div>
+        <% } %>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12">
+    <div class="card-panel">
+      <div class="card-header-bar"><h2>Prompt</h2></div>
+      <div class="card-body-pad">
+        <pre class="mb-0 small" style="white-space:pre-wrap;"><%= log.prompt || '-' %></pre>
+        <% if (log.schema_hint) { %>
+          <hr />
+          <div class="text-muted small fw-semibold mb-1">Schema hint</div>
+          <pre class="mb-0 small" style="white-space:pre-wrap;"><%= log.schema_hint %></pre>
+        <% } %>
+      </div>
+    </div>
+  </div>
+
+  <% if (log.has_file && log.file_text) { %>
+  <div class="col-12">
+    <div class="card-panel">
+      <div class="card-header-bar"><h2>File content (extracted text)</h2></div>
+      <div class="card-body-pad">
+        <pre class="mb-0 small" style="white-space:pre-wrap; max-height:360px; overflow:auto;"><%= log.file_text %></pre>
+      </div>
+    </div>
+  </div>
+  <% } %>
+
+  <div class="col-12">
+    <div class="card-panel">
+      <div class="card-header-bar"><h2>AI Response</h2></div>
+      <div class="card-body-pad">
+        <pre class="mb-0 small alert-token" style="white-space:pre-wrap; max-height:480px; overflow:auto;"><%= log.ai_response || '-' %></pre>
+      </div>
+    </div>
+  </div>
+</div>
+
+<%- include('../partials/shell-end') %>

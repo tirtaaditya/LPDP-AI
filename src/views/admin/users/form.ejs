@@ -1,0 +1,45 @@
+<%- include('../partials/shell-start') %>
+
+<div class="card-panel">
+  <div class="card-header-bar">
+    <h2><%= mode === 'create' ? 'Add User' : 'Edit User' %></h2>
+    <a href="/admin/users" class="btn btn-sm btn-light">Back to list</a>
+  </div>
+  <div class="card-body-pad">
+    <form method="post" action="<%= mode === 'create' ? '/admin/users' : '/admin/users/' + user.id %>" class="row g-3" style="max-width:640px;">
+      <div class="col-md-6">
+        <label class="form-label">Username</label>
+        <input class="form-control" name="username" value="<%= user.username || '' %>" required />
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">Role</label>
+        <select class="form-select" name="role" required>
+          <option value="api" <%= user.role === 'api' ? 'selected' : '' %>>api</option>
+          <option value="admin" <%= user.role === 'admin' ? 'selected' : '' %>>admin</option>
+        </select>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">
+          <%= mode === 'create' ? 'Password' : 'New password (optional)' %>
+        </label>
+        <input class="form-control" type="password" name="password" <%= mode === 'create' ? 'required' : '' %> />
+      </div>
+      <% if (mode === 'edit') { %>
+        <div class="col-md-6">
+          <label class="form-label">Status</label>
+          <select class="form-select" name="is_active">
+            <option value="1" <%= user.is_active ? 'selected' : '' %>>Active</option>
+            <option value="0" <%= !user.is_active ? 'selected' : '' %>>Disabled</option>
+          </select>
+        </div>
+      <% } %>
+      <div class="col-12 pt-2">
+        <button type="submit" class="btn btn-primary px-4">
+          <%= mode === 'create' ? 'Create' : 'Save changes' %>
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<%- include('../partials/shell-end') %>

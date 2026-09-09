@@ -1,0 +1,54 @@
+<%- include('../partials/shell-start') %>
+
+<div class="card-panel">
+  <div class="card-header-bar">
+    <h2>User List</h2>
+    <a href="/admin/users/create" class="btn btn-primary btn-sm">
+      <i class="bi bi-plus-lg"></i> Add User
+    </a>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-modern table-hover align-middle mb-0 datatable w-100">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Username</th>
+          <th>Role</th>
+          <th>Status</th>
+          <th>Created</th>
+          <th class="text-end">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% users.forEach(function(u) { %>
+          <tr>
+            <td><%= u.id %></td>
+            <td class="fw-semibold"><%= u.username %></td>
+            <td>
+              <span class="badge rounded-pill <%= u.role === 'admin' ? 'badge-role-admin' : 'badge-role-api' %>">
+                <%= u.role %>
+              </span>
+            </td>
+            <td>
+              <% if (u.is_active) { %>
+                <span class="badge text-bg-success">Active</span>
+              <% } else { %>
+                <span class="badge text-bg-secondary">Disabled</span>
+              <% } %>
+            </td>
+            <td><%= u.created_at %></td>
+            <td class="text-end text-nowrap">
+              <a href="/admin/users/<%= u.id %>/edit" class="btn btn-sm btn-light-primary">Edit</a>
+              <form method="post" action="/admin/users/<%= u.id %>/delete" class="d-inline"
+                    onsubmit="return confirm('Delete user <%= u.username %>?');">
+                <button type="submit" class="btn btn-sm btn-light-danger">Delete</button>
+              </form>
+            </td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<%- include('../partials/shell-end') %>

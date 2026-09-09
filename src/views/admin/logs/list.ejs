@@ -1,0 +1,27 @@
+<%- include('../partials/shell-start') %>
+
+<div class="card-panel">
+  <div class="card-header-bar">
+    <h2>AI Extract Logs</h2>
+  </div>
+  <div class="table-responsive">
+    <table id="logs-datatable" class="table table-modern table-hover align-middle mb-0 w-100" data-server-side="true">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Time</th>
+          <th>User / Token</th>
+          <th>Prompt</th>
+          <th>File</th>
+          <th>Status</th>
+          <th>Model</th>
+          <th>Tokens</th>
+          <th class="text-end">Action</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</div>
+
+<%- include('../partials/shell-end') %>

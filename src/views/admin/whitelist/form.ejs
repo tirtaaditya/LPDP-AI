@@ -1,0 +1,40 @@
+<%- include('../partials/shell-start') %>
+
+<div class="card-panel">
+  <div class="card-header-bar">
+    <h2><%= mode === 'create' ? 'Add IP' : 'Edit IP' %></h2>
+    <a href="/admin/whitelist" class="btn btn-sm btn-light">Back to list</a>
+  </div>
+  <div class="card-body-pad">
+    <form method="post"
+          action="<%= mode === 'create' ? '/admin/whitelist' : '/admin/whitelist/' + row.id %>"
+          class="row g-3" style="max-width:640px;">
+      <div class="col-md-6">
+        <label class="form-label">API User</label>
+        <select class="form-select" name="user_id" required>
+          <option value="">— select —</option>
+          <% apiUsers.forEach(function(u) { %>
+            <option value="<%= u.id %>" <%= String(row.user_id) === String(u.id) ? 'selected' : '' %>>
+              <%= u.username %>
+            </option>
+          <% }) %>
+        </select>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">IP Address</label>
+        <input class="form-control" name="ip" value="<%= row.ip || '' %>" placeholder="10.44.200.10" required />
+      </div>
+      <div class="col-12">
+        <label class="form-label">Label</label>
+        <input class="form-control" name="label" value="<%= row.label || '' %>" placeholder="Office / VPN" />
+      </div>
+      <div class="col-12 pt-2">
+        <button type="submit" class="btn btn-primary px-4">
+          <%= mode === 'create' ? 'Add IP' : 'Save changes' %>
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<%- include('../partials/shell-end') %>

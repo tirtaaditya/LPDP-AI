@@ -1,0 +1,110 @@
+<%- include('../partials/shell-start') %>
+
+<div class="card-panel">
+  <div class="card-header-bar">
+    <h2>System Settings</h2>
+  </div>
+  <div class="card-body-pad">
+    <form method="post" action="/admin/settings" class="row g-3" style="max-width:820px;">
+      <div class="col-12">
+        <label class="form-label">AI Provider</label>
+        <div class="d-flex gap-4">
+          <div class="form-check">
+            <input class="form-check-input" type="radio" name="ai_provider" id="provider_openai" value="openai"
+              <%= (settings.ai_provider || 'openai') !== 'ollama' ? 'checked' : '' %> />
+            <label class="form-check-label fw-semibold" for="provider_openai">OpenAI</label>
+          </div>
+          <div class="form-check">
+            <input class="form-check-input" type="radio" name="ai_provider" id="provider_ollama" value="ollama"
+              <%= settings.ai_provider === 'ollama' ? 'checked' : '' %> />
+            <label class="form-check-label fw-semibold" for="provider_ollama">Ollama</label>
+          </div>
+        </div>
+        <div class="form-text">Pilih provider aktif untuk endpoint extract. Disimpan di database.</div>
+      </div>
+
+      <div class="col-12"><hr class="my-1" /><div class="fw-bold">OpenAI</div></div>
+      <div class="col-12">
+        <label class="form-label">OpenAI API Key</label>
+        <input
+          class="form-control"
+          type="password"
+          name="openai_api_key"
+          value=""
+          autocomplete="new-password"
+          placeholder="<%= hasOpenAiKey ? ('Key tersimpan: ' + openAiKeyHint + ' — kosongkan jika tidak diganti') : 'sk-proj-... paste key di sini' %>"
+        />
+        <div class="form-text">
+          <% if (hasOpenAiKey) { %>Status: <span class="text-success fw-semibold">sudah di-set</span>.<% } else { %>Status: <span class="text-danger fw-semibold">belum di-set</span>.<% } %>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">OpenAI Model</label>
+        <input class="form-control" name="openai_model" value="<%= settings.openai_model || '' %>" placeholder="gpt-4o-mini" />
+      </div>
+
+      <div class="col-12"><hr class="my-1" /><div class="fw-bold">Ollama</div></div>
+      <div class="col-md-8">
+        <label class="form-label">Ollama Base URL</label>
+        <input class="form-control" name="ollama_base_url" value="<%= settings.ollama_base_url || '' %>" placeholder="http://10.44.200.73:11434" />
+        <div class="form-text">Tanpa trailing slash. App otomatis pakai <code>/v1</code> (OpenAI-compatible).</div>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label">Ollama Model</label>
+        <input class="form-control" name="ollama_model" value="<%= settings.ollama_model || '' %>" placeholder="gpt-oss:latest" />
+      </div>
+      <div class="col-12">
+        <label class="form-label">Ollama API Key</label>
+        <input
+          class="form-control"
+          type="password"
+          name="ollama_api_key"
+          value=""
+          autocomplete="new-password"
+          placeholder="<%= hasOllamaKey ? ('Key tersimpan: ' + ollamaKeyHint + ' — kosongkan jika tidak diganti') : 'lpdp_...' %>"
+        />
+        <div class="form-text">
+          <% if (hasOllamaKey) { %>Status: <span class="text-success fw-semibold">sudah di-set</span>.<% } else { %>Status: <span class="text-danger fw-semibold">belum di-set</span>.<% } %>
+          Catatan: PDF scan (tanpa teks) sebaiknya pakai OpenAI.
+        </div>
+      </div>
+
+      <div class="col-12"><hr class="my-1" /><div class="fw-bold">Common</div></div>
+      <div class="col-md-3">
+        <label class="form-label">Temperature</label>
+        <input class="form-control" name="temperature" value="<%= settings.temperature || '' %>" />
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Max tokens</label>
+        <input class="form-control" name="max_tokens" value="<%= settings.max_tokens || '' %>" />
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Max upload (MB)</label>
+        <input class="form-control" name="max_upload_mb" value="<%= settings.max_upload_mb || '' %>" />
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Allowed file types</label>
+        <input class="form-control" name="allowed_file_types" value="<%= settings.allowed_file_types || '' %>" />
+      </div>
+      <div class="col-12">
+        <label class="form-label">System prompt</label>
+        <textarea class="form-control" name="system_prompt" rows="6"><%= settings.system_prompt || '' %></textarea>
+      </div>
+      <div class="col-12">
+        <div class="form-check form-switch">
+          <input class="form-check-input" type="checkbox" role="switch" id="ip_whitelist_enabled"
+                 name="ip_whitelist_enabled" value="true"
+                 <%= settings.ip_whitelist_enabled === 'true' ? 'checked' : '' %> />
+          <label class="form-check-label fw-semibold" for="ip_whitelist_enabled">
+            Enable IP whitelist (per API user)
+          </label>
+        </div>
+      </div>
+      <div class="col-12 pt-2">
+        <button type="submit" class="btn btn-primary px-4">Save Settings</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<%- include('../partials/shell-end') %>

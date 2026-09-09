@@ -1,0 +1,30 @@
+<%- include('../partials/shell-start') %>
+
+<div class="card-panel">
+  <div class="card-header-bar">
+    <h2>Create API Token</h2>
+    <a href="/admin/tokens" class="btn btn-sm btn-light">Back to list</a>
+  </div>
+  <div class="card-body-pad">
+    <form method="post" action="/admin/tokens" class="row g-3" style="max-width:640px;">
+      <div class="col-md-6">
+        <label class="form-label">API User</label>
+        <select class="form-select" name="user_id" required>
+          <option value="">— select —</option>
+          <% apiUsers.forEach(function(u) { %>
+            <option value="<%= u.id %>"><%= u.username %></option>
+          <% }) %>
+        </select>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">Token name</label>
+        <input class="form-control" name="name" placeholder="Integration XYZ" />
+      </div>
+      <div class="col-12 pt-2">
+        <button type="submit" class="btn btn-primary px-4">Create Token</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<%- include('../partials/shell-end') %>

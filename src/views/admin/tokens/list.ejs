@@ -1,0 +1,63 @@
+<%- include('../partials/shell-start') %>
+
+<% if (newToken) { %>
+  <div class="alert alert-warning">
+    <strong>Copy this token now</strong> — it will not be shown again.
+    <div class="alert-token mt-2"><%= newToken %></div>
+  </div>
+<% } %>
+
+<div class="card-panel">
+  <div class="card-header-bar">
+    <h2>API Tokens</h2>
+    <a href="/admin/tokens/create" class="btn btn-primary btn-sm">
+      <i class="bi bi-plus-lg"></i> Create Token
+    </a>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-modern table-hover align-middle mb-0 datatable w-100">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>API User</th>
+          <th>Name</th>
+          <th>Prefix</th>
+          <th>Status</th>
+          <th>Created</th>
+          <th class="text-end">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% tokens.forEach(function(t) { %>
+          <tr>
+            <td><%= t.id %></td>
+            <td class="fw-semibold"><%= t.username %></td>
+            <td><%= t.name %></td>
+            <td><code><%= t.token_prefix %>...</code></td>
+            <td>
+              <% if (t.is_active) { %>
+                <span class="badge text-bg-success">Active</span>
+              <% } else { %>
+                <span class="badge text-bg-secondary">Revoked</span>
+              <% } %>
+            </td>
+            <td><%= t.created_at %></td>
+            <td class="text-end text-nowrap">
+              <% if (t.is_active) { %>
+                <form method="post" action="/admin/tokens/<%= t.id %>/revoke" class="d-inline">
+                  <button type="submit" class="btn btn-sm btn-light-warning">Revoke</button>
+                </form>
+              <% } %>
+              <form method="post" action="/admin/tokens/<%= t.id %>/delete" class="d-inline"
+                    onsubmit="return confirm('Delete this token permanently?');">
+                <button type="submit" class="btn btn-sm btn-light-danger">Delete</button>
+              </form>
+            </td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<%- include('../partials/shell-end') %>

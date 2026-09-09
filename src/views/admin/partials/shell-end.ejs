@@ -1,0 +1,53 @@
+      </main>
+    </div>
+  </div>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <script src="https://cdn.datatables.net/1.13.8/js/jquery.dataTables.min.js"></script>
+  <script src="https://cdn.datatables.net/1.13.8/js/dataTables.bootstrap5.min.js"></script>
+  <script>
+    (function () {
+      var common = {
+        pageLength: 10,
+        lengthMenu: [10, 25, 50, 100],
+        order: [[0, 'desc']],
+        language: {
+          search: 'Search:',
+          lengthMenu: 'Show _MENU_',
+          info: 'Showing _START_–_END_ of _TOTAL_',
+          infoEmpty: 'No records',
+          zeroRecords: 'No matching records',
+          paginate: { previous: 'Prev', next: 'Next' }
+        },
+        columnDefs: [{ orderable: false, targets: -1 }]
+      };
+
+      document.querySelectorAll('table.datatable').forEach(function (el) {
+        if (el.dataset.serverSide === 'true') return;
+        $(el).DataTable(common);
+      });
+
+      var logsTable = document.getElementById('logs-datatable');
+      if (logsTable) {
+        $(logsTable).DataTable(Object.assign({}, common, {
+          processing: true,
+          serverSide: true,
+          ajax: '/admin/logs/data',
+          order: [[0, 'desc']],
+          columns: [
+            { data: 0 },
+            { data: 1 },
+            { data: 2, orderable: true },
+            { data: 3, orderable: false },
+            { data: 4 },
+            { data: 5 },
+            { data: 6 },
+            { data: 7 },
+            { data: 8, orderable: false, className: 'text-end' }
+          ]
+        }));
+      }
+    })();
+  </script>
+</body>
+</html>
