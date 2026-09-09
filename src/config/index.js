@@ -1,15 +1,45 @@
+const fs = require('fs');
 const path = require('path');
 const dotenv = require('dotenv');
 
 // Always load .env from project root (works with PM2 even if cwd is wrong).
-// override: true so .env wins over empty/stale Windows or PM2 env vars.
 const projectRoot = path.resolve(__dirname, '..');
-dotenv.config({ path: path.join(projectRoot, '.env'), override: true });
+const envPath = path.join(projectRoot, '.env');
+
+function loadEnvFile(filePath) {
+  if (!fs.existsSync(filePath)) {
+    console.warn(`[config] .env not found at ${filePath}`);
+    return;
+  }
+
+  let buf = fs.readFileSync(filePath);
+  // Strip UTF-8 BOM
+  if (buf.length >= 3 && buf[0] === 0xef && buf[1] === 0xbb && buf[2] === 0xbf) {
+    buf = buf.subarray(3);
+  }
+  // UTF-16 LE (common when edited with Windows Notepad "Unicode")
+  if (buf.length >= 2 && buf[0] === 0xff && buf[1] === 0xfe) {
+    buf = Buffer.from(buf.toString('utf16le').slice(1), 'utf8');
+  } else if (buf.includes(0) && !buf.slice(0, 64).toString('utf8').includes('=')) {
+    // UTF-16 without BOM (null bytes between ASCII chars)
+    buf = Buffer.from(buf.toString('utf16le'), 'utf8');
+  }
+
+  const parsed = dotenv.parse(buf);
+  for (const [key, value] of Object.entries(parsed)) {
+    process.env[key] = String(value).trim();
+  }
+}
+
+loadEnvFile(envPath);
 
 function required(name, fallback) {
-  const value = process.env[name] ?? fallback;
+  const raw = process.env[name] ?? fallback;
+  const value = raw == null ? raw : String(raw).trim();
   if (value === undefined || value === '') {
-    throw new Error(`Missing required env: ${name}`);
+    throw new Error(
+      `Missing required env: ${name} (checked ${envPath}; exists=${fs.existsSync(envPath)})`
+    );
   }
   return value;
 }
