@@ -44,20 +44,24 @@
       </div>
       <div class="col-md-4">
         <label class="form-label">Image model</label>
-        <input class="form-control" name="openai_image_model" value="<%= settings.openai_image_model || 'dall-e-3' %>" placeholder="dall-e-3" />
+        <input class="form-control" name="openai_image_model" value="<%= settings.openai_image_model || 'gpt-image-1' %>" placeholder="gpt-image-1" />
       </div>
       <div class="col-md-2">
         <label class="form-label">Image size</label>
         <select class="form-select" name="openai_image_size">
           <% const imgSize = settings.openai_image_size || '1024x1024'; %>
           <option value="1024x1024" <%= imgSize === '1024x1024' ? 'selected' : '' %>>1024×1024</option>
-          <option value="1024x1792" <%= imgSize === '1024x1792' ? 'selected' : '' %>>1024×1792</option>
-          <option value="1792x1024" <%= imgSize === '1792x1024' ? 'selected' : '' %>>1792×1024</option>
+          <option value="1536x1024" <%= imgSize === '1536x1024' ? 'selected' : '' %>>1536×1024</option>
+          <option value="1024x1536" <%= imgSize === '1024x1536' ? 'selected' : '' %>>1024×1536</option>
+          <option value="1024x1792" <%= imgSize === '1024x1792' ? 'selected' : '' %>>1024×1792 (DALL·E 3)</option>
+          <option value="1792x1024" <%= imgSize === '1792x1024' ? 'selected' : '' %>>1792×1024 (DALL·E 3)</option>
         </select>
       </div>
       <div class="col-12">
         <div class="form-text">
-          Image generation dipakai di AI Chat (mode Image / perintah <code>/image ...</code>). Butuh provider OpenAI.
+          Rekomendasi model: <code>gpt-image-1</code> / <code>gpt-image-2</code>.
+          Kalau error “model does not exist”, ganti Image model di sini sesuai akses API key kamu.
+          Chat Image mode / perintah <code>/image ...</code> butuh provider OpenAI.
         </div>
       </div>
 

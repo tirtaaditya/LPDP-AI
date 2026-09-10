@@ -100,6 +100,48 @@ async function saveGeneratedImage(b64, ext = 'png') {
   };
 }
 
+function buildImagePayload(model, prompt, imageSize) {
+  const isGptImage = /^gpt-image/i.test(model) || /chatgpt-image/i.test(model);
+  const isDalle3 = /dall-e-3/i.test(model);
+  const isDalle2 = /dall-e-2/i.test(model);
+
+  const payload = {
+    model,
+    prompt: prompt.slice(0, 3500),
+    n: 1,
+  };
+
+  if (isGptImage) {
+    // GPT Image models return b64 by default; response_format is not used.
+    const allowed = ['1024x1024', '1536x1024', '1024x1536', 'auto'];
+    payload.size = allowed.includes(imageSize) ? imageSize : '1024x1024';
+    return payload;
+  }
+
+  if (isDalle3) {
+    payload.response_format = 'b64_json';
+    const allowed = ['1024x1024', '1024x1792', '1792x1024'];
+    payload.size = allowed.includes(imageSize) ? imageSize : '1024x1024';
+    return payload;
+  }
+
+  if (isDalle2) {
+    payload.response_format = 'b64_json';
+    const allowed = ['256x256', '512x512', '1024x1024'];
+    payload.size = allowed.includes(imageSize) ? imageSize : '1024x1024';
+    return payload;
+  }
+
+  // Unknown model: minimal payload
+  payload.size = imageSize || '1024x1024';
+  return payload;
+}
+
+function isModelMissingError(err) {
+  const msg = String(err?.message || err || '');
+  return /does not exist|model_not_found|invalid model|not available/i.test(msg);
+}
+
 async function generateImage({ prompt, size }) {
   const runtime = await getAiRuntime();
   if (runtime.provider !== 'openai') {
@@ -110,8 +152,9 @@ async function generateImage({ prompt, size }) {
     throw err;
   }
 
-  const model =
-    String(await db.getSetting('openai_image_model', 'dall-e-3')).trim() || 'dall-e-3';
+  const preferred =
+    String(await db.getSetting('openai_image_model', 'gpt-image-1')).trim() ||
+    'gpt-image-1';
   const imageSize =
     size ||
     String(await db.getSetting('openai_image_size', '1024x1024')).trim() ||
@@ -124,33 +167,59 @@ async function generateImage({ prompt, size }) {
     throw err;
   }
 
-  const payload = {
-    model,
-    prompt: cleanPrompt.slice(0, 3500),
-    n: 1,
-    size: imageSize,
-    response_format: 'b64_json',
-  };
+  // Try preferred model, then common fallbacks (some orgs/API gateways lack dall-e-3)
+  const candidates = [
+    preferred,
+    'gpt-image-1',
+    'gpt-image-1.5',
+    'gpt-image-2',
+    'dall-e-2',
+    'dall-e-3',
+  ].filter((m, i, arr) => m && arr.indexOf(m) === i);
 
-  // dall-e-3 only supports n=1 and specific sizes
-  if (model.includes('dall-e-3')) {
-    payload.n = 1;
-    if (!['1024x1024', '1024x1792', '1792x1024'].includes(imageSize)) {
-      payload.size = '1024x1024';
+  let result = null;
+  let usedModel = preferred;
+  let usedPayload = null;
+  const tried = [];
+  let lastErr = null;
+
+  for (const model of candidates) {
+    const payload = buildImagePayload(model, cleanPrompt, imageSize);
+    tried.push(model);
+    try {
+      result = await runtime.client.images.generate(payload);
+      usedModel = model;
+      usedPayload = payload;
+      break;
+    } catch (err) {
+      lastErr = err;
+      if (/response_format|unknown_parameter|unknown parameter/i.test(err.message || '')) {
+        try {
+          const retryPayload = { ...payload };
+          delete retryPayload.response_format;
+          result = await runtime.client.images.generate(retryPayload);
+          usedModel = model;
+          usedPayload = retryPayload;
+          break;
+        } catch (err2) {
+          lastErr = err2;
+          if (!isModelMissingError(err2)) throw err2;
+          continue;
+        }
+      }
+      if (isModelMissingError(err)) continue;
+      throw err;
     }
   }
 
-  let result;
-  try {
-    result = await runtime.client.images.generate(payload);
-  } catch (err) {
-    // Some newer models may not accept response_format
-    if (/response_format|unknown parameter/i.test(err.message || '')) {
-      delete payload.response_format;
-      result = await runtime.client.images.generate(payload);
-    } else {
-      throw err;
-    }
+  if (!result) {
+    const err = new Error(
+      `${lastErr?.message || 'Image model unavailable'}. Tried: ${tried.join(', ')}. ` +
+        'Set Image model in Admin → Settings to a model your API key supports ' +
+        '(e.g. gpt-image-1, gpt-image-2, dall-e-2).'
+    );
+    err.code = 'IMAGE_MODEL_UNAVAILABLE';
+    throw err;
   }
 
   const item = result.data?.[0];
@@ -170,19 +239,34 @@ async function generateImage({ prompt, size }) {
     }
     b64 = Buffer.from(await res.arrayBuffer()).toString('base64');
   }
+  if (!b64) {
+    const err = new Error('Image generation returned no image data');
+    err.code = 'IMAGE_EMPTY';
+    throw err;
+  }
 
   const saved = await saveGeneratedImage(b64, 'png');
+  // Persist working model so next request is faster
+  if (usedModel !== preferred) {
+    try {
+      await db.setSetting('openai_image_model', usedModel);
+    } catch {
+      // ignore
+    }
+  }
+
   return {
     reply: item.revised_prompt
-      ? `Gambar berhasil dibuat.\n\nPrompt (revised):\n${item.revised_prompt}`
-      : 'Gambar berhasil dibuat.',
+      ? `Gambar berhasil dibuat (model: ${usedModel}).\n\nPrompt (revised):\n${item.revised_prompt}`
+      : `Gambar berhasil dibuat (model: ${usedModel}).`,
     images: [saved],
     meta: {
       provider: 'openai',
-      model,
-      size: payload.size,
+      model: usedModel,
+      size: usedPayload?.size || imageSize,
       mode: 'image_generation',
       revised_prompt: item.revised_prompt || null,
+      tried_models: tried,
     },
   };
 }
