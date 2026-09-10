@@ -51,8 +51,13 @@ function logout(req, res) {
 
 async function dashboard(req, res, next) {
   try {
-    const counts = await db.getDashboardCounts();
-    const settings = await db.getAllSettings();
+    const days = Math.min(90, Math.max(1, Number(req.query.days) || 30));
+    const [counts, settings, usage] = await Promise.all([
+      db.getDashboardCounts(),
+      db.getAllSettings(),
+      db.getUsageAnalytics({ days }),
+    ]);
+    const pricingService = require('../services/pricing.service');
     return res.render(
       'admin/dashboard',
       pageLocals(req, {
@@ -60,6 +65,10 @@ async function dashboard(req, res, next) {
         pageTitle: 'Dashboard',
         counts,
         settings,
+        usage,
+        days,
+        formatUsd: pricingService.formatUsd,
+        formatIdr: pricingService.formatIdr,
       })
     );
   } catch (err) {
@@ -359,6 +368,10 @@ async function settingsUpdate(req, res) {
       'max_upload_mb',
       'allowed_file_types',
       'ip_whitelist_enabled',
+      'openai_price_prompt_per_1m_usd',
+      'openai_price_completion_per_1m_usd',
+      'usd_to_idr',
+      'openai_image_price_usd',
     ];
 
     for (const key of allowed) {
@@ -374,6 +387,25 @@ async function settingsUpdate(req, res) {
           const fileService = require('../services/file.service');
           const list = fileService.normalizeAllowedTypes(value);
           value = list.length ? list.join(',') : 'pdf,docx,txt';
+        }
+        if (
+          [
+            'openai_price_prompt_per_1m_usd',
+            'openai_price_completion_per_1m_usd',
+            'usd_to_idr',
+            'openai_image_price_usd',
+          ].includes(key)
+        ) {
+          const n = Number(value);
+          if (!Number.isFinite(n) || n < 0) {
+            return flashRedirect(
+              res,
+              '/admin/settings',
+              'error',
+              `Invalid number for ${key}`
+            );
+          }
+          value = String(n);
         }
         await db.setSetting(key, value);
       }
@@ -432,6 +464,7 @@ async function logsData(req, res, next) {
       'response_status',
       'model',
       'total_tokens',
+      'cost_usd',
       'id',
     ];
     const orderColumn = orderMap[orderIdx] || 'id';
@@ -448,11 +481,16 @@ async function logsData(req, res, next) {
       }),
     ]);
 
+    const pricingService = require('../services/pricing.service');
+    const pricing = await pricingService.getTokenPricing();
+
     const data = rows.map((row) => {
       const tokenLabel =
         row.auth_type === 'static'
           ? `${row.token_name || 'token'} · ${(row.token_prefix || '')}...`
-          : 'JWT';
+          : row.auth_type === 'admin_chat'
+            ? `Admin Chat${row.schema_hint && String(row.schema_hint).includes('image') ? ' · image' : ''}`
+            : 'JWT';
       const prompt =
         (row.prompt_preview || '-') +
         (row.prompt_preview && row.prompt_preview.length >= 120 ? '…' : '');
@@ -464,11 +502,18 @@ async function logsData(req, res, next) {
         let count = 1;
         try {
           const info = JSON.parse(row.file_name || '{}');
-          const names = (info.files || []).map((f) => f.file_name).filter(Boolean);
-          const urls = info.urls || [];
-          count = names.length || urls.length || 1;
-          label = names.length ? names.join(', ') : urls.map((u) => String(u).split('/').pop()).join(', ');
-          if (!label) label = `${count} file(s)`;
+          if (Array.isArray(info.uploads) || Array.isArray(info.generated)) {
+            const uploadNames = (info.uploads || []).map((f) => f.name || f.file_name).filter(Boolean);
+            const genNames = (info.generated || []).map((f) => f.fileName || f.url).filter(Boolean);
+            count = uploadNames.length + genNames.length || 1;
+            label = [...uploadNames, ...genNames].join(', ') || `${count} file(s)`;
+          } else {
+            const names = (info.files || []).map((f) => f.file_name).filter(Boolean);
+            const urls = info.urls || [];
+            count = names.length || urls.length || 1;
+            label = names.length ? names.join(', ') : urls.map((u) => String(u).split('/').pop()).join(', ');
+            if (!label) label = `${count} file(s)`;
+          }
         } catch {
           label = String(row.file_name || 'file').slice(0, 60);
         }
@@ -481,6 +526,26 @@ async function logsData(req, res, next) {
           : `<span class="badge text-bg-danger">${escapeHtml(row.response_status || 'error')}</span>`;
       const actionHtml = `<a class="btn btn-sm btn-light-primary" href="/admin/logs/${row.id}">View</a>`;
 
+      let costUsd = row.cost_usd != null ? Number(row.cost_usd) : null;
+      let costIdr = row.cost_idr != null ? Number(row.cost_idr) : null;
+      if (costUsd == null) {
+        const est = pricingService.computeTokenCost(
+          {
+            promptTokens: row.prompt_tokens,
+            completionTokens: row.completion_tokens,
+            schemaHint: row.schema_hint,
+            responseStatus: row.response_status,
+          },
+          pricing
+        );
+        costUsd = est.costUsd;
+        costIdr = est.costIdr;
+      } else if (costIdr == null) {
+        costIdr = costUsd * pricing.usdToIdr;
+      }
+
+      const costHtml = `<span class="small d-block">${escapeHtml(pricingService.formatUsd(costUsd))}</span><span class="small text-muted">${escapeHtml(pricingService.formatIdr(costIdr))}</span>`;
+
       return [
         row.id,
         formatDate(row.created_at),
@@ -490,6 +555,7 @@ async function logsData(req, res, next) {
         statusHtml,
         `<span class="small">${escapeHtml(row.model || '-')}</span>`,
         `<span class="small">${row.total_tokens != null ? row.total_tokens : '-'}</span>`,
+        costHtml,
         actionHtml,
       ];
     });
@@ -526,12 +592,36 @@ async function logsDetail(req, res, next) {
   try {
     const log = await db.getExtractLogById(Number(req.params.id));
     if (!log) return flashRedirect(res, '/admin/logs', 'error', 'Log not found');
+    const pricingService = require('../services/pricing.service');
+    const pricing = await pricingService.getTokenPricing();
+    let costUsd = log.cost_usd != null ? Number(log.cost_usd) : null;
+    let costIdr = log.cost_idr != null ? Number(log.cost_idr) : null;
+    if (costUsd == null) {
+      const est = pricingService.computeTokenCost(
+        {
+          promptTokens: log.prompt_tokens,
+          completionTokens: log.completion_tokens,
+          schemaHint: log.schema_hint,
+          responseStatus: log.response_status,
+        },
+        pricing
+      );
+      costUsd = est.costUsd;
+      costIdr = est.costIdr;
+    } else if (costIdr == null) {
+      costIdr = costUsd * pricing.usdToIdr;
+    }
     return res.render(
       'admin/logs/detail',
       pageLocals(req, {
         activeMenu: 'logs',
         pageTitle: `AI Log #${log.id}`,
         log,
+        costUsd,
+        costIdr,
+        formatUsd: pricingService.formatUsd,
+        formatIdr: pricingService.formatIdr,
+        pricing,
       })
     );
   } catch (err) {
@@ -577,19 +667,57 @@ async function chatPage(req, res, next) {
 async function chatMessage(req, res) {
   const chatService = require('../services/chat.service');
   const fileService = require('../services/file.service');
+  const started = Date.now();
+  const ip = req.clientIp || req.ip;
+  const requestId = req.requestId || null;
+
+  const message = String(req.body?.message || '').trim();
+  let history = [];
+  try {
+    history = JSON.parse(req.body?.history || '[]');
+    if (!Array.isArray(history)) history = [];
+  } catch {
+    history = [];
+  }
+
+  const uploads = Array.isArray(req.files) ? req.files : [];
+  const forceImage =
+    String(req.body?.generate_image || '').toLowerCase() === 'true' ||
+    String(req.body?.generate_image || '') === '1';
+
+  async function saveChatLog(payload) {
+    try {
+      await db.createExtractLog({
+        requestId,
+        userId: req.admin?.uid ?? null,
+        username: req.admin?.sub || null,
+        authType: 'admin_chat',
+        tokenId: null,
+        tokenName: 'Admin Chat',
+        tokenPrefix: 'chat',
+        ip,
+        ...payload,
+      });
+    } catch (err) {
+      console.error('Failed to save chat log:', err.message);
+    }
+  }
 
   try {
-    const message = String(req.body?.message || '').trim();
-    let history = [];
-    try {
-      history = JSON.parse(req.body?.history || '[]');
-      if (!Array.isArray(history)) history = [];
-    } catch {
-      history = [];
-    }
-
-    const uploads = Array.isArray(req.files) ? req.files : [];
     if (!message && uploads.length === 0) {
+      await saveChatLog({
+        prompt: message || '',
+        schemaHint: 'admin_chat',
+        hasFile: false,
+        fileName: null,
+        fileSize: null,
+        fileText: null,
+        aiResponse: null,
+        responseStatus: 'error',
+        httpStatus: 400,
+        durationMs: Date.now() - started,
+        errorMessage: 'message or file is required',
+      });
       return res.status(400).json({
         status: 'error',
         data: null,
@@ -598,10 +726,6 @@ async function chatMessage(req, res) {
     }
 
     const processed = await chatService.processChatUploads(uploads);
-    const forceImage =
-      String(req.body?.generate_image || '').toLowerCase() === 'true' ||
-      String(req.body?.generate_image || '') === '1';
-
     const result = await chatService.chat({
       message: message || 'Please analyze the attached file(s).',
       history: history.slice(-20),
@@ -610,11 +734,44 @@ async function chatMessage(req, res) {
       forceImage,
     });
 
+    const usage = result.meta?.usage || {};
+    const images = result.images || [];
+    const mode = result.meta?.mode || (forceImage ? 'image_generation' : 'chat');
+    const aiResponse = JSON.stringify({
+      reply: result.reply,
+      images,
+      meta: result.meta || null,
+    });
+
+    await saveChatLog({
+      prompt: message || '(file only)',
+      schemaHint: `admin_chat:${mode}`,
+      hasFile: processed.filesMeta.length > 0 || images.length > 0,
+      fileName:
+        processed.filesMeta.length || images.length
+          ? JSON.stringify({
+              uploads: processed.filesMeta,
+              generated: images,
+            })
+          : null,
+      fileSize: processed.filesMeta.reduce((sum, f) => sum + (Number(f.size) || 0), 0) || null,
+      fileText: processed.fileText || null,
+      aiResponse,
+      model: result.meta?.model || null,
+      promptTokens: usage.prompt_tokens ?? null,
+      completionTokens: usage.completion_tokens ?? null,
+      totalTokens: usage.total_tokens ?? null,
+      responseStatus: 'success',
+      httpStatus: 200,
+      durationMs: Date.now() - started,
+      errorMessage: null,
+    });
+
     return res.json({
       status: 'success',
       data: {
         reply: result.reply,
-        images: result.images || [],
+        images,
         files: processed.filesMeta,
         meta: result.meta,
       },
@@ -634,6 +791,29 @@ async function chatMessage(req, res) {
       err.code === 'IMAGE_PROVIDER_UNSUPPORTED'
         ? 503
         : 400;
+
+    await saveChatLog({
+      prompt: message || '(file only)',
+      schemaHint: forceImage ? 'admin_chat:image_generation' : 'admin_chat:chat',
+      hasFile: uploads.length > 0,
+      fileName: uploads.length
+        ? JSON.stringify({
+            uploads: uploads.map((f) => ({
+              name: f.originalname,
+              size: f.size,
+            })),
+          })
+        : null,
+      fileSize: uploads.reduce((sum, f) => sum + (Number(f.size) || 0), 0) || null,
+      fileText: null,
+      aiResponse: null,
+      model: null,
+      responseStatus: 'error',
+      httpStatus: status,
+      durationMs: Date.now() - started,
+      errorMessage: err.message || 'Chat failed',
+    });
+
     return res.status(status).json({
       status: 'error',
       data: null,

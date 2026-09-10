@@ -49,6 +49,11 @@
             total: <%= log.total_tokens != null ? log.total_tokens : '-' %>
           </div>
         </div>
+        <div class="mb-2"><span class="text-muted">Est. cost (USD)</span><div class="fw-bold"><%= formatUsd(costUsd) %></div></div>
+        <div class="mb-2"><span class="text-muted">Est. cost (IDR)</span><div class="fw-bold"><%= formatIdr(costIdr) %></div></div>
+        <div class="mb-0 small text-muted">
+          Rate: $<%= pricing.promptPer1mUsd %>/1M in · $<%= pricing.completionPer1mUsd %>/1M out · kurs <%= Number(pricing.usdToIdr).toLocaleString('id-ID') %>
+        </div>
       </div>
     </div>
   </div>
@@ -79,6 +84,31 @@
                 </ul>
               </div>
             <% } %>
+          <% } else if (fileInfo && (fileInfo.uploads || fileInfo.generated)) { %>
+            <% if (fileInfo.uploads && fileInfo.uploads.length) { %>
+              <div class="mb-2"><span class="text-muted">Uploads</span>
+                <ul class="mb-0 ps-3">
+                  <% fileInfo.uploads.forEach(function(f) { %>
+                    <li><%= f.name || f.file_name || 'file' %><%= f.size != null ? ' (' + f.size + ' bytes)' : '' %></li>
+                  <% }) %>
+                </ul>
+              </div>
+            <% } %>
+            <% if (fileInfo.generated && fileInfo.generated.length) { %>
+              <div class="mb-2"><span class="text-muted">Generated</span>
+                <ul class="mb-0 ps-3">
+                  <% fileInfo.generated.forEach(function(f) { %>
+                    <li>
+                      <% if (f.url) { %>
+                        <a href="<%= f.url %>" target="_blank" rel="noopener"><%= f.fileName || f.url %></a>
+                      <% } else { %>
+                        <%= f.fileName || 'image' %>
+                      <% } %>
+                    </li>
+                  <% }) %>
+                </ul>
+              </div>
+            <% } %>
           <% } else { %>
             <div class="mb-2"><span class="text-muted">Name</span><div class="fw-bold"><%= log.file_name || '-' %></div></div>
           <% } %>
@@ -97,7 +127,7 @@
         <pre class="mb-0 small" style="white-space:pre-wrap;"><%= log.prompt || '-' %></pre>
         <% if (log.schema_hint) { %>
           <hr />
-          <div class="text-muted small fw-semibold mb-1">Schema hint</div>
+          <div class="text-muted small fw-semibold mb-1"><%= log.auth_type === 'admin_chat' ? 'Source / mode' : 'Schema hint' %></div>
           <pre class="mb-0 small" style="white-space:pre-wrap;"><%= log.schema_hint %></pre>
         <% } %>
       </div>

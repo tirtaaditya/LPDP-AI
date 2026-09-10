@@ -4,7 +4,7 @@
   <div>
     <p class="dash-kicker">intelligence overview</p>
     <h2 class="dash-title">Control Plane</h2>
-    <p class="dash-sub">Status akses, provider, dan kapasitas sistem AI LPDP.</p>
+    <p class="dash-sub">Status akses, pemakaian token, dan estimasi biaya AI.</p>
   </div>
   <div class="dash-live">
     <span class="ai-pulse"></span>
@@ -32,6 +32,172 @@
     <div class="icon bg-info-soft"><i class="bi bi-key-fill"></i></div>
     <div class="label">Active Tokens</div>
     <div class="value"><%= counts.tokens_count %></div>
+  </div>
+</div>
+
+<% const s = usage.summary || {}; const p = usage.pricing || {}; %>
+<div class="dash-toolbar">
+  <div>
+    <h3 class="dash-section-title mb-0">Token &amp; Cost Usage</h3>
+    <p class="dash-section-sub mb-0">Estimasi berdasarkan harga di Settings (per 1M tokens).</p>
+  </div>
+  <div class="dash-range">
+    <a class="btn btn-sm <%= days === 7 ? 'btn-primary' : 'btn-light' %>" href="/admin?days=7">7d</a>
+    <a class="btn btn-sm <%= days === 30 ? 'btn-primary' : 'btn-light' %>" href="/admin?days=30">30d</a>
+    <a class="btn btn-sm <%= days === 90 ? 'btn-primary' : 'btn-light' %>" href="/admin?days=90">90d</a>
+  </div>
+</div>
+
+<div class="stat-grid usage-stat-grid">
+  <div class="stat-card">
+    <div class="icon bg-primary-soft"><i class="bi bi-activity"></i></div>
+    <div class="label">Requests (<%= days %>d)</div>
+    <div class="value"><%= Number(s.request_count || 0).toLocaleString('id-ID') %></div>
+    <div class="stat-foot"><%= Number(s.success_count || 0).toLocaleString('id-ID') %> ok · <%= Number(s.error_count || 0).toLocaleString('id-ID') %> err</div>
+  </div>
+  <div class="stat-card">
+    <div class="icon bg-info-soft"><i class="bi bi-cpu-fill"></i></div>
+    <div class="label">Total Tokens</div>
+    <div class="value"><%= Number(s.total_tokens || 0).toLocaleString('id-ID') %></div>
+    <div class="stat-foot">in <%= Number(s.prompt_tokens || 0).toLocaleString('id-ID') %> · out <%= Number(s.completion_tokens || 0).toLocaleString('id-ID') %></div>
+  </div>
+  <div class="stat-card">
+    <div class="icon bg-success-soft"><i class="bi bi-currency-dollar"></i></div>
+    <div class="label">Est. Cost USD</div>
+    <div class="value value-sm"><%= formatUsd(s.cost_usd) %></div>
+    <div class="stat-foot">prompt $<%= p.promptPer1mUsd %>/1M · completion $<%= p.completionPer1mUsd %>/1M</div>
+  </div>
+  <div class="stat-card">
+    <div class="icon bg-warning-soft"><i class="bi bi-cash-stack"></i></div>
+    <div class="label">Est. Cost IDR</div>
+    <div class="value value-sm"><%= formatIdr(s.cost_idr) %></div>
+    <div class="stat-foot">kurs <%= Number(p.usdToIdr || 0).toLocaleString('id-ID') %> · image $<%= p.imageUsd %></div>
+  </div>
+</div>
+
+<div class="row g-3 mb-3">
+  <div class="col-lg-7">
+    <div class="card-panel h-100">
+      <div class="card-header-bar">
+        <h2>Per Day</h2>
+        <span class="ai-chip">last <%= days %>d</span>
+      </div>
+      <div class="card-body-pad">
+        <div class="chart-wrap">
+          <canvas id="usage-day-chart" height="140"></canvas>
+        </div>
+        <div class="table-responsive mt-3">
+          <table class="table table-modern table-sm align-middle mb-0">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th class="text-end">Req</th>
+                <th class="text-end">Tokens</th>
+                <th class="text-end">USD</th>
+                <th class="text-end">IDR</th>
+              </tr>
+            </thead>
+            <tbody>
+              <% (usage.byDay || []).forEach(function(row) { %>
+                <tr>
+                  <td><%= row.usage_date ? new Date(row.usage_date).toLocaleDateString('id-ID') : '-' %></td>
+                  <td class="text-end"><%= Number(row.request_count || 0).toLocaleString('id-ID') %></td>
+                  <td class="text-end"><%= Number(row.total_tokens || 0).toLocaleString('id-ID') %></td>
+                  <td class="text-end"><%= formatUsd(row.cost_usd) %></td>
+                  <td class="text-end"><%= formatIdr(row.cost_idr) %></td>
+                </tr>
+              <% }) %>
+              <% if (!(usage.byDay || []).length) { %>
+                <tr><td colspan="5" class="text-muted text-center py-3">Belum ada data pemakaian.</td></tr>
+              <% } %>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-5">
+    <div class="card-panel h-100">
+      <div class="card-header-bar">
+        <h2>Per User</h2>
+        <span class="ai-chip">top 50</span>
+      </div>
+      <div class="card-body-pad">
+        <div class="table-responsive">
+          <table class="table table-modern table-sm align-middle mb-0">
+            <thead>
+              <tr>
+                <th>User</th>
+                <th class="text-end">Req</th>
+                <th class="text-end">Tokens</th>
+                <th class="text-end">Cost</th>
+              </tr>
+            </thead>
+            <tbody>
+              <% (usage.byUser || []).forEach(function(row) { %>
+                <tr>
+                  <td>
+                    <div class="fw-semibold"><%= row.username || '(anonymous)' %></div>
+                    <div class="small text-muted">id <%= row.user_id || '-' %></div>
+                  </td>
+                  <td class="text-end"><%= Number(row.request_count || 0).toLocaleString('id-ID') %></td>
+                  <td class="text-end"><%= Number(row.total_tokens || 0).toLocaleString('id-ID') %></td>
+                  <td class="text-end">
+                    <div><%= formatUsd(row.cost_usd) %></div>
+                    <div class="small text-muted"><%= formatIdr(row.cost_idr) %></div>
+                  </td>
+                </tr>
+              <% }) %>
+              <% if (!(usage.byUser || []).length) { %>
+                <tr><td colspan="4" class="text-muted text-center py-3">Belum ada data per user.</td></tr>
+              <% } %>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card-panel mb-3">
+  <div class="card-header-bar">
+    <h2>Per User / Day</h2>
+    <span class="ai-chip">top 100</span>
+  </div>
+  <div class="card-body-pad">
+    <div class="table-responsive">
+      <table class="table table-modern table-sm align-middle mb-0">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>User</th>
+            <th class="text-end">Requests</th>
+            <th class="text-end">Prompt</th>
+            <th class="text-end">Completion</th>
+            <th class="text-end">Total</th>
+            <th class="text-end">USD</th>
+            <th class="text-end">IDR</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% (usage.byUserDay || []).forEach(function(row) { %>
+            <tr>
+              <td><%= row.usage_date ? new Date(row.usage_date).toLocaleDateString('id-ID') : '-' %></td>
+              <td><%= row.username || '(anonymous)' %></td>
+              <td class="text-end"><%= Number(row.request_count || 0).toLocaleString('id-ID') %></td>
+              <td class="text-end"><%= Number(row.prompt_tokens || 0).toLocaleString('id-ID') %></td>
+              <td class="text-end"><%= Number(row.completion_tokens || 0).toLocaleString('id-ID') %></td>
+              <td class="text-end"><%= Number(row.total_tokens || 0).toLocaleString('id-ID') %></td>
+              <td class="text-end"><%= formatUsd(row.cost_usd) %></td>
+              <td class="text-end"><%= formatIdr(row.cost_idr) %></td>
+            </tr>
+          <% }) %>
+          <% if (!(usage.byUserDay || []).length) { %>
+            <tr><td colspan="8" class="text-muted text-center py-3">Belum ada breakdown per user per hari.</td></tr>
+          <% } %>
+        </tbody>
+      </table>
+    </div>
   </div>
 </div>
 
@@ -64,9 +230,58 @@
       </div>
     </div>
     <p class="runtime-hint mb-0">
-      Gunakan sidebar untuk manage <strong>Users</strong>, <strong>IP Whitelist</strong>, <strong>API Tokens</strong>, dan <strong>Settings</strong>.
+      Atur harga token di <a href="/admin/settings">Settings</a>. Log detail ada di <a href="/admin/logs">AI Logs</a>.
     </p>
   </div>
 </div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+  (function () {
+    var rows = <%- JSON.stringify((usage.byDay || []).slice().reverse().map(function(r) {
+      return {
+        label: r.usage_date ? new Date(r.usage_date).toLocaleDateString('id-ID', { day: '2-digit', month: 'short' }) : '-',
+        tokens: Number(r.total_tokens || 0),
+        cost: Number(r.cost_usd || 0)
+      };
+    })) %>;
+    var canvas = document.getElementById('usage-day-chart');
+    if (!canvas || typeof Chart === 'undefined') return;
+    new Chart(canvas, {
+      type: 'bar',
+      data: {
+        labels: rows.map(function (r) { return r.label; }),
+        datasets: [
+          {
+            label: 'Tokens',
+            data: rows.map(function (r) { return r.tokens; }),
+            backgroundColor: 'rgba(37, 99, 235, 0.55)',
+            borderRadius: 6,
+            yAxisID: 'y'
+          },
+          {
+            label: 'USD',
+            data: rows.map(function (r) { return r.cost; }),
+            type: 'line',
+            borderColor: 'rgba(5, 150, 105, 0.9)',
+            backgroundColor: 'rgba(5, 150, 105, 0.12)',
+            tension: 0.3,
+            yAxisID: 'y1'
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        scales: {
+          y: { position: 'left', beginAtZero: true, grid: { color: 'rgba(15,23,42,0.06)' } },
+          y1: { position: 'right', beginAtZero: true, grid: { drawOnChartArea: false } }
+        },
+        plugins: { legend: { position: 'bottom' } }
+      }
+    });
+  })();
+</script>
 
 <%- include('partials/shell-end') %>

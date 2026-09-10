@@ -465,6 +465,46 @@ body.sidebar-collapsed .aside-menu a.active {
   margin-bottom: 20px;
 }
 
+.dash-toolbar {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 8px 0 14px;
+  flex-wrap: wrap;
+}
+
+.dash-section-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.dash-section-sub {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.dash-range {
+  display: flex;
+  gap: 8px;
+}
+
+.usage-stat-grid .stat-foot {
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.stat-card .value.value-sm {
+  font-size: 1.35rem;
+}
+
+.chart-wrap {
+  height: 220px;
+  position: relative;
+}
+
 .stat-card {
   background: #fff;
   border: 1px solid var(--card-border);

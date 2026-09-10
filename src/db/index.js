@@ -171,6 +171,8 @@ async function migrate() {
         prompt_tokens INT NULL,
         completion_tokens INT NULL,
         total_tokens INT NULL,
+        cost_usd DECIMAL(18, 8) NULL,
+        cost_idr DECIMAL(18, 2) NULL,
         ip NVARCHAR(64) NULL,
         duration_ms INT NULL,
         error_message NVARCHAR(1000) NULL,
@@ -182,6 +184,17 @@ async function migrate() {
     BEGIN
       ALTER TABLE dbo.ai_extract_logs ALTER COLUMN file_name NVARCHAR(MAX) NULL;
     END;
+  `);
+
+  await pool.request().query(`
+    IF OBJECT_ID('dbo.ai_extract_logs', 'U') IS NOT NULL
+       AND COL_LENGTH('dbo.ai_extract_logs', 'cost_usd') IS NULL
+      ALTER TABLE dbo.ai_extract_logs ADD cost_usd DECIMAL(18, 8) NULL;
+  `);
+  await pool.request().query(`
+    IF OBJECT_ID('dbo.ai_extract_logs', 'U') IS NOT NULL
+       AND COL_LENGTH('dbo.ai_extract_logs', 'cost_idr') IS NULL
+      ALTER TABLE dbo.ai_extract_logs ADD cost_idr DECIMAL(18, 2) NULL;
   `);
 }
 
@@ -202,6 +215,10 @@ async function seed() {
     max_upload_mb: String(config.maxUploadMb),
     allowed_file_types: 'pdf,docx,txt,jpg,jpeg,png,webp',
     ip_whitelist_enabled: 'false',
+    openai_price_prompt_per_1m_usd: '0.15',
+    openai_price_completion_per_1m_usd: '0.60',
+    usd_to_idr: '16000',
+    openai_image_price_usd: '0.04',
   };
 
   const pool = await getPool();
@@ -611,6 +628,24 @@ function truncateText(value, max = 80000) {
 }
 
 async function createExtractLog(entry) {
+  let costUsd = entry.costUsd;
+  let costIdr = entry.costIdr;
+  if (costUsd == null || costIdr == null) {
+    const pricingService = require('../services/pricing.service');
+    const pricing = await pricingService.getTokenPricing();
+    const cost = pricingService.computeTokenCost(
+      {
+        promptTokens: entry.promptTokens,
+        completionTokens: entry.completionTokens,
+        schemaHint: entry.schemaHint,
+        responseStatus: entry.responseStatus,
+      },
+      pricing
+    );
+    if (costUsd == null) costUsd = cost.costUsd;
+    if (costIdr == null) costIdr = cost.costIdr;
+  }
+
   const pool = await getPool();
   const result = await pool
     .request()
@@ -634,6 +669,8 @@ async function createExtractLog(entry) {
     .input('prompt_tokens', sql.Int, entry.promptTokens ?? null)
     .input('completion_tokens', sql.Int, entry.completionTokens ?? null)
     .input('total_tokens', sql.Int, entry.totalTokens ?? null)
+    .input('cost_usd', sql.Decimal(18, 8), costUsd ?? null)
+    .input('cost_idr', sql.Decimal(18, 2), costIdr ?? null)
     .input('ip', sql.NVarChar(64), entry.ip || null)
     .input('duration_ms', sql.Int, entry.durationMs ?? null)
     .input('error_message', sql.NVarChar(1000), entry.errorMessage || null)
@@ -642,7 +679,7 @@ async function createExtractLog(entry) {
         request_id, user_id, username, auth_type, token_id, token_name, token_prefix,
         prompt, schema_hint, has_file, file_name, file_size, file_text,
         ai_response, response_status, http_status, model,
-        prompt_tokens, completion_tokens, total_tokens,
+        prompt_tokens, completion_tokens, total_tokens, cost_usd, cost_idr,
         ip, duration_ms, error_message
       )
       OUTPUT INSERTED.id
@@ -650,7 +687,7 @@ async function createExtractLog(entry) {
         @request_id, @user_id, @username, @auth_type, @token_id, @token_name, @token_prefix,
         @prompt, @schema_hint, @has_file, @file_name, @file_size, @file_text,
         @ai_response, @response_status, @http_status, @model,
-        @prompt_tokens, @completion_tokens, @total_tokens,
+        @prompt_tokens, @completion_tokens, @total_tokens, @cost_usd, @cost_idr,
         @ip, @duration_ms, @error_message
       )
     `);
@@ -672,6 +709,8 @@ async function listExtractLogs({
     response_status: 'response_status',
     model: 'model',
     total_tokens: 'total_tokens',
+    cost_usd: 'cost_usd',
+    cost_idr: 'cost_idr',
     file_name: 'file_name',
   };
   const col = allowedOrder[orderColumn] || 'id';
@@ -689,6 +728,8 @@ async function listExtractLogs({
          username LIKE @search
          OR token_name LIKE @search
          OR token_prefix LIKE @search
+         OR auth_type LIKE @search
+         OR schema_hint LIKE @search
          OR file_name LIKE @search
          OR response_status LIKE @search
          OR model LIKE @search
@@ -699,7 +740,8 @@ async function listExtractLogs({
 
   const result = await request.query(`
     SELECT id, request_id, user_id, username, auth_type, token_id, token_name, token_prefix,
-           has_file, file_name, response_status, http_status, model, total_tokens,
+           schema_hint, has_file, file_name, response_status, http_status, model,
+           prompt_tokens, completion_tokens, total_tokens, cost_usd, cost_idr,
            ip, duration_ms, created_at,
            LEFT(prompt, 120) AS prompt_preview
     FROM dbo.ai_extract_logs
@@ -708,6 +750,125 @@ async function listExtractLogs({
     OFFSET @offset ROWS FETCH NEXT @limit ROWS ONLY
   `);
   return result.recordset;
+}
+
+/**
+ * Token / cost usage analytics for dashboard.
+ * Costs: use stored cost_* when present; else estimate from current pricing settings.
+ */
+async function getUsageAnalytics({ days = 30 } = {}) {
+  const pricingService = require('../services/pricing.service');
+  const pricing = await pricingService.getTokenPricing();
+  const dayCount = Math.min(90, Math.max(1, Number(days) || 30));
+  const pool = await getPool();
+
+  const reqBase = () =>
+    pool
+      .request()
+      .input('days', sql.Int, dayCount)
+      .input('prompt_price', sql.Float, pricing.promptPer1mUsd)
+      .input('completion_price', sql.Float, pricing.completionPer1mUsd)
+      .input('usd_to_idr', sql.Float, pricing.usdToIdr)
+      .input('image_price', sql.Float, pricing.imageUsd);
+
+  const costExpr = `
+    COALESCE(
+      cost_usd,
+      CASE
+        WHEN ISNULL(prompt_tokens, 0) = 0
+             AND ISNULL(completion_tokens, 0) = 0
+             AND schema_hint LIKE N'%image%'
+             AND response_status = N'success'
+          THEN @image_price
+        ELSE
+          (CAST(ISNULL(prompt_tokens, 0) AS FLOAT) / 1000000.0) * @prompt_price
+          + (CAST(ISNULL(completion_tokens, 0) AS FLOAT) / 1000000.0) * @completion_price
+      END
+    )
+  `;
+
+  const [summaryRes, byDayRes, byUserRes, byUserDayRes] = await Promise.all([
+    reqBase().query(`
+      SELECT
+        COUNT(*) AS request_count,
+        SUM(CASE WHEN response_status = N'success' THEN 1 ELSE 0 END) AS success_count,
+        SUM(CASE WHEN response_status = N'error' THEN 1 ELSE 0 END) AS error_count,
+        SUM(CAST(ISNULL(prompt_tokens, 0) AS BIGINT)) AS prompt_tokens,
+        SUM(CAST(ISNULL(completion_tokens, 0) AS BIGINT)) AS completion_tokens,
+        SUM(CAST(ISNULL(total_tokens, 0) AS BIGINT)) AS total_tokens,
+        SUM(${costExpr}) AS cost_usd,
+        SUM((${costExpr}) * @usd_to_idr) AS cost_idr
+      FROM dbo.ai_extract_logs
+      WHERE created_at >= DATEADD(DAY, -@days, SYSUTCDATETIME())
+    `),
+    reqBase().query(`
+      SELECT
+        CONVERT(date, created_at) AS usage_date,
+        COUNT(*) AS request_count,
+        SUM(CAST(ISNULL(prompt_tokens, 0) AS BIGINT)) AS prompt_tokens,
+        SUM(CAST(ISNULL(completion_tokens, 0) AS BIGINT)) AS completion_tokens,
+        SUM(CAST(ISNULL(total_tokens, 0) AS BIGINT)) AS total_tokens,
+        SUM(${costExpr}) AS cost_usd,
+        SUM((${costExpr}) * @usd_to_idr) AS cost_idr
+      FROM dbo.ai_extract_logs
+      WHERE created_at >= DATEADD(DAY, -@days, SYSUTCDATETIME())
+      GROUP BY CONVERT(date, created_at)
+      ORDER BY usage_date DESC
+    `),
+    reqBase().query(`
+      SELECT TOP 50
+        ISNULL(NULLIF(LTRIM(RTRIM(username)), N''), N'(anonymous)') AS username,
+        ISNULL(user_id, 0) AS user_id,
+        COUNT(*) AS request_count,
+        SUM(CAST(ISNULL(prompt_tokens, 0) AS BIGINT)) AS prompt_tokens,
+        SUM(CAST(ISNULL(completion_tokens, 0) AS BIGINT)) AS completion_tokens,
+        SUM(CAST(ISNULL(total_tokens, 0) AS BIGINT)) AS total_tokens,
+        SUM(${costExpr}) AS cost_usd,
+        SUM((${costExpr}) * @usd_to_idr) AS cost_idr
+      FROM dbo.ai_extract_logs
+      WHERE created_at >= DATEADD(DAY, -@days, SYSUTCDATETIME())
+      GROUP BY ISNULL(NULLIF(LTRIM(RTRIM(username)), N''), N'(anonymous)'), ISNULL(user_id, 0)
+      ORDER BY total_tokens DESC, request_count DESC
+    `),
+    reqBase().query(`
+      SELECT TOP 100
+        CONVERT(date, created_at) AS usage_date,
+        ISNULL(NULLIF(LTRIM(RTRIM(username)), N''), N'(anonymous)') AS username,
+        ISNULL(user_id, 0) AS user_id,
+        COUNT(*) AS request_count,
+        SUM(CAST(ISNULL(prompt_tokens, 0) AS BIGINT)) AS prompt_tokens,
+        SUM(CAST(ISNULL(completion_tokens, 0) AS BIGINT)) AS completion_tokens,
+        SUM(CAST(ISNULL(total_tokens, 0) AS BIGINT)) AS total_tokens,
+        SUM(${costExpr}) AS cost_usd,
+        SUM((${costExpr}) * @usd_to_idr) AS cost_idr
+      FROM dbo.ai_extract_logs
+      WHERE created_at >= DATEADD(DAY, -@days, SYSUTCDATETIME())
+      GROUP BY
+        CONVERT(date, created_at),
+        ISNULL(NULLIF(LTRIM(RTRIM(username)), N''), N'(anonymous)'),
+        ISNULL(user_id, 0)
+      ORDER BY usage_date DESC, total_tokens DESC
+    `),
+  ]);
+
+  const summary = summaryRes.recordset[0] || {};
+  return {
+    days: dayCount,
+    pricing,
+    summary: {
+      request_count: Number(summary.request_count) || 0,
+      success_count: Number(summary.success_count) || 0,
+      error_count: Number(summary.error_count) || 0,
+      prompt_tokens: Number(summary.prompt_tokens) || 0,
+      completion_tokens: Number(summary.completion_tokens) || 0,
+      total_tokens: Number(summary.total_tokens) || 0,
+      cost_usd: Number(summary.cost_usd) || 0,
+      cost_idr: Number(summary.cost_idr) || 0,
+    },
+    byDay: byDayRes.recordset || [],
+    byUser: byUserRes.recordset || [],
+    byUserDay: byUserDayRes.recordset || [],
+  };
 }
 
 async function getExtractLogById(id) {
@@ -736,6 +897,8 @@ async function countExtractLogs(search = '') {
         username LIKE @search
         OR token_name LIKE @search
         OR token_prefix LIKE @search
+        OR auth_type LIKE @search
+        OR schema_hint LIKE @search
         OR file_name LIKE @search
         OR response_status LIKE @search
         OR model LIKE @search
@@ -785,6 +948,7 @@ module.exports = {
   deleteApiToken,
   findActiveTokenByHash,
   getDashboardCounts,
+  getUsageAnalytics,
   logRequest,
   createExtractLog,
   listExtractLogs,
