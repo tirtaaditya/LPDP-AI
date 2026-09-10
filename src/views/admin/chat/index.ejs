@@ -16,12 +16,16 @@
   <div id="chat-messages" class="chat-messages">
     <div class="chat-bubble assistant">
       Halo! Saya asisten AI LPDP. Ada yang ingin kamu tanyakan?
+      Untuk buat gambar: aktifkan mode Image, atau ketik /image deskripsi gambar.
     </div>
   </div>
 
   <div id="chat-file-preview" class="chat-file-preview d-none"></div>
 
   <form id="chat-form" class="chat-composer">
+    <button type="button" id="btn-image-mode" class="chat-mode-btn" title="Toggle image generation" aria-pressed="false">
+      <i class="bi bi-image"></i>
+    </button>
     <label class="chat-attach btn btn-light-primary mb-0" title="Attach files">
       <i class="bi bi-paperclip"></i>
       <input type="file" id="chat-files" name="files" multiple accept="<%= typeof acceptAttr !== 'undefined' ? acceptAttr : '.pdf,.docx,.txt,application/pdf' %>" hidden />
@@ -193,6 +197,43 @@
     border-top: 1px solid var(--card-border);
     background: #fff;
   }
+  .chat-mode-btn {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    display: grid;
+    place-items: center;
+    flex: 0 0 auto;
+    border: 1px solid #dbe3ee;
+    background: #fff;
+    color: #64748b;
+    cursor: pointer;
+  }
+  .chat-mode-btn.is-active {
+    background: #ecfeff;
+    border-color: #67e8f9;
+    color: #0e7490;
+    box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.12);
+  }
+  .chat-image {
+    display: block;
+    max-width: min(420px, 100%);
+    width: 100%;
+    border-radius: 12px;
+    margin-top: 10px;
+    border: 1px solid var(--card-border);
+    background: #0f172a;
+  }
+  .chat-image-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+  }
+  .chat-image-actions a {
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: #0e7490;
+  }
   .chat-composer textarea {
     flex: 1;
     resize: none;
@@ -266,9 +307,22 @@
   const sendBtn = document.getElementById('chat-send');
   const clearBtn = document.getElementById('btn-clear-chat');
   const jumpBtn = document.getElementById('chat-jump');
+  const imageModeBtn = document.getElementById('btn-image-mode');
 
   let history = [];
   let pendingFiles = [];
+  let imageMode = false;
+
+  if (imageModeBtn) {
+    imageModeBtn.addEventListener('click', function () {
+      imageMode = !imageMode;
+      imageModeBtn.classList.toggle('is-active', imageMode);
+      imageModeBtn.setAttribute('aria-pressed', imageMode ? 'true' : 'false');
+      input.placeholder = imageMode
+        ? 'Deskripsikan gambar yang ingin dibuat...'
+        : 'Tulis pesan... (Enter kirim, Shift+Enter baris baru)';
+    });
+  }
 
   function nearBottom() {
     return messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight < 80;
@@ -331,13 +385,40 @@
     return t.length > 900 || t.split('\n').length > 16;
   }
 
-  function appendBubble(role, text, meta) {
+  function appendBubble(role, text, meta, images) {
     const div = document.createElement('div');
     div.className = 'chat-bubble ' + role;
     const body = document.createElement('div');
     body.className = 'chat-bubble-body';
-    body.textContent = text;
+    body.textContent = text || '';
     div.appendChild(body);
+
+    if (Array.isArray(images) && images.length) {
+      images.forEach(function (img) {
+        if (!img || !img.url) return;
+        const picture = document.createElement('img');
+        picture.className = 'chat-image';
+        picture.src = img.url;
+        picture.alt = img.fileName || 'Generated image';
+        picture.loading = 'lazy';
+        div.appendChild(picture);
+
+        const actions = document.createElement('div');
+        actions.className = 'chat-image-actions';
+        const open = document.createElement('a');
+        open.href = img.url;
+        open.target = '_blank';
+        open.rel = 'noopener';
+        open.textContent = 'Open full size';
+        const download = document.createElement('a');
+        download.href = img.url;
+        download.download = img.fileName || 'generated.png';
+        download.textContent = 'Download';
+        actions.appendChild(open);
+        actions.appendChild(download);
+        div.appendChild(actions);
+      });
+    }
 
     if (meta) {
       const m = document.createElement('span');
@@ -394,6 +475,7 @@
     const fd = new FormData();
     fd.append('message', text);
     fd.append('history', JSON.stringify(history));
+    fd.append('generate_image', imageMode ? 'true' : 'false');
     pendingFiles.forEach(function (f) { fd.append('files', f); });
 
     input.value = '';
@@ -406,7 +488,9 @@
     const typing = document.createElement('div');
     typing.className = 'chat-typing ai-think';
     typing.id = 'chat-typing';
-    typing.innerHTML = '<span>Model inferencing</span><span class="dots"><span></span><span></span><span></span></span>';
+    typing.innerHTML = imageMode
+      ? '<span>Generating image</span><span class="dots"><span></span><span></span><span></span></span>'
+      : '<span>Model inferencing</span><span class="dots"><span></span><span></span><span></span></span>';
     messagesEl.appendChild(typing);
     scrollToBottom(true);
 
@@ -426,15 +510,21 @@
       }
 
       const reply = json.data.reply || '';
+      const images = json.data.images || [];
       const meta = json.data.meta || {};
-      appendBubble(
-        'assistant',
-        reply,
-        (meta.provider || '') + (meta.model ? ' · ' + meta.model : '')
-      );
+      const metaLabel = [
+        meta.mode === 'image_generation' ? 'image' : null,
+        meta.provider || '',
+        meta.model || ''
+      ].filter(Boolean).join(' · ');
+
+      appendBubble('assistant', reply, metaLabel, images);
 
       history.push({ role: 'user', content: userLabel });
-      history.push({ role: 'assistant', content: reply });
+      history.push({
+        role: 'assistant',
+        content: reply + (images.length ? ' [generated image]' : '')
+      });
       if (history.length > 40) history = history.slice(-40);
     } catch (err) {
       const typingEl = document.getElementById('chat-typing');

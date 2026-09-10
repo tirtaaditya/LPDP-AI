@@ -190,6 +190,8 @@ async function seed() {
     ai_provider: 'openai',
     openai_api_key: '',
     openai_model: 'gpt-4o-mini',
+    openai_image_model: 'dall-e-3',
+    openai_image_size: '1024x1024',
     ollama_base_url: 'http://10.44.200.73:11434',
     ollama_model: 'gpt-oss:latest',
     ollama_api_key: 'lpdp_bb39f26a93594792b289e397e04402aa',

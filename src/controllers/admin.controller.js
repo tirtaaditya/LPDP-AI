@@ -349,6 +349,8 @@ async function settingsUpdate(req, res) {
     const allowed = [
       'ai_provider',
       'openai_model',
+      'openai_image_model',
+      'openai_image_size',
       'ollama_base_url',
       'ollama_model',
       'temperature',
@@ -596,17 +598,23 @@ async function chatMessage(req, res) {
     }
 
     const processed = await chatService.processChatUploads(uploads);
+    const forceImage =
+      String(req.body?.generate_image || '').toLowerCase() === 'true' ||
+      String(req.body?.generate_image || '') === '1';
+
     const result = await chatService.chat({
       message: message || 'Please analyze the attached file(s).',
       history: history.slice(-20),
       fileText: processed.fileText,
       visionFiles: processed.visionFiles,
+      forceImage,
     });
 
     return res.json({
       status: 'success',
       data: {
         reply: result.reply,
+        images: result.images || [],
         files: processed.filesMeta,
         meta: result.meta,
       },
@@ -621,7 +629,9 @@ async function chatMessage(req, res) {
     }
     console.error('Admin chat error:', err);
     const status =
-      err.code === 'OPENAI_NOT_CONFIGURED' || err.code === 'OLLAMA_NOT_CONFIGURED'
+      err.code === 'OPENAI_NOT_CONFIGURED' ||
+      err.code === 'OLLAMA_NOT_CONFIGURED' ||
+      err.code === 'IMAGE_PROVIDER_UNSUPPORTED'
         ? 503
         : 400;
     return res.status(status).json({
