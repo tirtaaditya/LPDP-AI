@@ -2,19 +2,29 @@
 
 Express.js + OpenAI + **SQL Server** (`db_lpdp_ai`).
 
-## Setup
+## Production deploy (setelah git pull)
+
+**Ya — biasanya perlu `npm install`** setelah pull, terutama jika `package.json` / `package-lock.json` berubah. Script di bawah sudah otomatis.
+
+### Linux / Ubuntu (PM2)
 
 ```bash
-npm install
-copy .env.example .env
-# edit .env → set DB_* credentials
-# OpenAI API key diisi lewat Admin → Settings (bukan .env)
-npm run init-db
-npm start
+cd /opt/lpdp-ai   # sesuaikan path
+chmod +x scripts/deploy.sh
+./scripts/deploy.sh
 ```
 
-Server: `http://localhost:3000`  
-Admin: `http://localhost:3000/admin/login`
+### Windows Server (PM2)
+
+```powershell
+cd "C:\path\to\AI LPDP"
+.\scripts\deploy.ps1
+```
+
+Opsi: `-SkipPull`, `-SkipInstall`, `-Branch main` (PS) / `--skip-pull` `--skip-install` `--branch main` (bash).
+
+Migrate DB jalan otomatis saat app start. File SQL di `sql/` hanya jika ada migrasi manual khusus.
+
 
 ## Users (in database, not `.env`)
 

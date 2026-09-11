@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
-    "init-db": "node src/db/init.js"
+    "init-db": "node src/db/init.js",
+    "deploy": "node -e \"console.log('Use scripts/deploy.sh (Linux) or scripts/deploy.ps1 (Windows)')\""
   },
   "engines": {
     "node": ">=18"
