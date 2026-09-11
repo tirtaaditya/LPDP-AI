@@ -1,5 +1,6 @@
 const crypto = require('crypto');
 const db = require('../db');
+const { safeClientMessage } = require('../utils/safeError');
 
 function requestLogger(req, res, next) {
   const started = Date.now();
@@ -35,12 +36,31 @@ function errorHandler(err, req, res, next) {
   if (res.headersSent) return next(err);
 
   const status = err.status || err.statusCode || 500;
-  const safeMessage =
-    status >= 500 && process.env.NODE_ENV === 'production'
-      ? 'Internal server error'
-      : err.message || 'Internal server error';
+  const safeMessage = safeClientMessage(
+    { ...err, status },
+    status >= 500 ? 'Internal server error' : 'Request failed'
+  );
 
-  res.status(status).json({
+  const wantsHtml =
+    req.accepts('html') &&
+    !String(req.headers.accept || '').includes('application/json') &&
+    !req.xhr &&
+    String(req.originalUrl || '').startsWith('/admin');
+
+  if (wantsHtml) {
+    return res.status(status).render('admin/error', {
+      pageTitle: status >= 500 ? 'Server Error' : 'Error',
+      status,
+      message: safeMessage,
+      admin: req.admin || null,
+      csrfToken: res.locals.csrfToken || null,
+      activeMenu: '',
+      flash: null,
+      error: null,
+    });
+  }
+
+  return res.status(status).json({
     status: 'error',
     data: null,
     message: safeMessage,

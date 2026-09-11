@@ -1,5 +1,6 @@
 const authService = require('../services/auth.service');
 const { failure } = require('../utils/response');
+const { setAdminCookie, clearAdminCookie } = require('./csrf');
 
 async function authenticateApi(req, res, next) {
   const header = req.headers.authorization || '';
@@ -45,17 +46,29 @@ async function authenticateApi(req, res, next) {
 function requireAdminSession(req, res, next) {
   const token = req.cookies?.admin_session;
   if (!token) {
-    if (req.accepts('html')) return res.redirect('/admin/login');
+    if (req.accepts('html') && !String(req.headers.accept || '').includes('application/json')) {
+      return res.redirect('/admin/login');
+    }
     return failure(res, 'Admin session required', 401);
   }
 
   try {
-    req.admin = authService.verifyAdminSession(token);
+    const payload = authService.verifyAdminSession(token);
+    req.admin = payload;
+    // Sliding idle: refresh lastActivity on every authenticated request
+    const refreshed = authService.touchAdminSession(payload);
+    setAdminCookie(res, refreshed);
     return next();
-  } catch {
-    res.clearCookie('admin_session');
-    if (req.accepts('html')) return res.redirect('/admin/login');
-    return failure(res, 'Admin session invalid', 401);
+  } catch (err) {
+    clearAdminCookie(res);
+    if (req.accepts('html') && !String(req.headers.accept || '').includes('application/json')) {
+      const q =
+        err.code === 'SESSION_IDLE'
+          ? '?error=' + encodeURIComponent('Session expired after 1 hour of inactivity')
+          : '';
+      return res.redirect('/admin/login' + q);
+    }
+    return failure(res, err.message || 'Admin session invalid', 401);
   }
 }
 

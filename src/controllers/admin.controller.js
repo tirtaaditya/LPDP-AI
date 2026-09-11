@@ -1,5 +1,16 @@
 const db = require('../db');
 const authService = require('../services/auth.service');
+const { setAdminCookie, clearAdminCookie } = require('../middleware/csrf');
+const { safeClientMessage } = require('../utils/safeError');
+const {
+  CAPTCHA_COOKIE,
+  createCaptcha,
+  verifyCaptcha,
+  readCaptcha,
+  captchaCookieOptions,
+  renderCaptchaSvg,
+  renderCaptchaWav,
+} = require('../utils/captcha');
 
 function flashRedirect(res, path, type, message) {
   const q = type === 'error' ? 'error' : 'flash';
@@ -17,35 +28,100 @@ function pageLocals(req, extra = {}) {
   };
 }
 
+function issueLoginCaptcha(res) {
+  const captcha = createCaptcha();
+  res.cookie(CAPTCHA_COOKIE, captcha.token, captchaCookieOptions());
+  return captcha;
+}
+
+function renderLoginView(res, { error = null } = {}) {
+  const captcha = issueLoginCaptcha(res);
+  const captchaSvg = String(captcha.svg).replace(/^<\?xml[^>]*>\s*/i, '');
+  return res.render('admin/login', {
+    error,
+    csrfToken: res.locals.csrfToken || null,
+    captchaSvg,
+  });
+}
+
 function renderLogin(req, res) {
   if (req.cookies?.admin_session) {
     try {
       authService.verifyAdminSession(req.cookies.admin_session);
       return res.redirect('/admin');
     } catch {
-      res.clearCookie('admin_session');
+      clearAdminCookie(res);
     }
   }
-  return res.render('admin/login', { error: null });
+  return renderLoginView(res, { error: req.query.error || null });
 }
 
 async function postLogin(req, res) {
-  const { username, password } = req.body || {};
+  const { username, password, captcha } = req.body || {};
+  const captchaToken = req.cookies?.[CAPTCHA_COOKIE];
+
+  if (!verifyCaptcha(captchaToken, captcha)) {
+    res.status(400);
+    return renderLoginView(res, {
+      error: 'Captcha salah atau kedaluwarsa. Coba lagi.',
+    });
+  }
+
   const user = await authService.loginAdmin(username, password);
   if (!user) {
-    return res.status(401).render('admin/login', { error: 'Invalid username or password' });
+    res.status(401);
+    return renderLoginView(res, {
+      error: 'Invalid username or password',
+    });
   }
+
+  res.clearCookie(CAPTCHA_COOKIE, { path: '/admin' });
   const token = authService.signAdminSession(user);
-  res.cookie('admin_session', token, {
-    httpOnly: true,
-    sameSite: 'lax',
-    maxAge: 8 * 60 * 60 * 1000,
-  });
+  setAdminCookie(res, token);
   return res.redirect('/admin');
 }
 
+function captchaImage(req, res) {
+  const token = req.cookies?.[CAPTCHA_COOKIE];
+  const payload = readCaptcha(token);
+  if (!payload) {
+    const captcha = issueLoginCaptcha(res);
+    res.setHeader('Content-Type', 'image/svg+xml');
+    res.setHeader('Cache-Control', 'no-store');
+    return res.send(captcha.svg);
+  }
+  res.setHeader('Content-Type', 'image/svg+xml');
+  res.setHeader('Cache-Control', 'no-store');
+  return res.send(renderCaptchaSvg(payload.code));
+}
+
+function captchaAudio(req, res) {
+  const token = req.cookies?.[CAPTCHA_COOKIE];
+  const payload = readCaptcha(token);
+  if (!payload) {
+    const captcha = issueLoginCaptcha(res);
+    res.setHeader('Content-Type', 'audio/wav');
+    res.setHeader('Cache-Control', 'no-store');
+    return res.send(captcha.wav);
+  }
+  res.setHeader('Content-Type', 'audio/wav');
+  res.setHeader('Cache-Control', 'no-store');
+  return res.send(renderCaptchaWav(payload.code));
+}
+
+function captchaRefresh(req, res) {
+  const captcha = issueLoginCaptcha(res);
+  res.setHeader('Cache-Control', 'no-store');
+  return res.json({
+    status: 'success',
+    data: {
+      svg: String(captcha.svg).replace(/^<\?xml[^>]*>\s*/i, ''),
+    },
+  });
+}
+
 function logout(req, res) {
-  res.clearCookie('admin_session');
+  clearAdminCookie(res);
   return res.redirect('/admin/login');
 }
 
@@ -110,7 +186,12 @@ async function usersCreate(req, res) {
     await db.createUser(String(username).trim(), String(password), role);
     return flashRedirect(res, '/admin/users', 'flash', `User ${username} created`);
   } catch (err) {
-    return flashRedirect(res, '/admin/users/create', 'error', err.message);
+    return flashRedirect(
+      res,
+      '/admin/users/create',
+      'error',
+      safeClientMessage(err, 'Failed to create user')
+    );
   }
 }
 
@@ -146,7 +227,12 @@ async function usersUpdate(req, res) {
     }
     return flashRedirect(res, '/admin/users', 'flash', 'User updated');
   } catch (err) {
-    return flashRedirect(res, `/admin/users/${id}/edit`, 'error', err.message);
+    return flashRedirect(
+      res,
+      `/admin/users/${id}/edit`,
+      'error',
+      safeClientMessage(err, 'Failed to update user')
+    );
   }
 }
 
@@ -159,7 +245,7 @@ async function usersDelete(req, res) {
     await db.deleteUser(id);
     return flashRedirect(res, '/admin/users', 'flash', 'User deleted');
   } catch (err) {
-    return flashRedirect(res, '/admin/users', 'error', err.message);
+    return flashRedirect(res, '/admin/users', 'error', safeClientMessage(err, 'Failed to delete user'));
   }
 }
 
@@ -857,8 +943,12 @@ async function changePassword(req, res) {
       return flashRedirect(res, redirectTo, 'error', 'Akun admin tidak valid');
     }
 
-    const bcrypt = require('bcryptjs');
-    const ok = bcrypt.compareSync(String(current_password), user.password_hash);
+    const { comparePassword } = require('../utils/password');
+    const ok = await comparePassword(
+      String(current_password),
+      user.password_hash,
+      user.password_salt || null
+    );
     if (!ok) {
       return flashRedirect(res, redirectTo, 'error', 'Password saat ini salah');
     }
@@ -866,13 +956,21 @@ async function changePassword(req, res) {
     await db.updateUserPassword(userId, String(new_password));
     return flashRedirect(res, redirectTo, 'flash', 'Password berhasil diganti');
   } catch (err) {
-    return flashRedirect(res, redirectTo, 'error', err.message || 'Gagal ganti password');
+    return flashRedirect(
+      res,
+      redirectTo,
+      'error',
+      safeClientMessage(err, 'Gagal ganti password')
+    );
   }
 }
 
 module.exports = {
   renderLogin,
   postLogin,
+  captchaImage,
+  captchaAudio,
+  captchaRefresh,
   logout,
   dashboard,
   usersList,

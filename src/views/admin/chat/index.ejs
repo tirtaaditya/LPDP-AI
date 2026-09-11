@@ -101,19 +101,22 @@
     line-height: 1.5;
     font-size: 0.95rem;
   }
-  .chat-bubble.is-collapsed {
-    max-height: 240px;
+  .chat-bubble-body {
+    position: relative;
+  }
+  .chat-bubble-body.is-collapsed {
+    max-height: 280px;
     overflow: hidden;
   }
-  .chat-bubble.is-collapsed::after {
+  .chat-bubble-body.is-collapsed::after {
     content: "";
     position: absolute;
     left: 0;
     right: 0;
     bottom: 0;
-    height: 64px;
+    height: 72px;
     pointer-events: none;
-    border-radius: 0 0 14px 14px;
+    border-radius: 0 0 10px 10px;
   }
   .chat-bubble.user {
     margin-left: auto;
@@ -122,7 +125,7 @@
     font-weight: 550;
     border-bottom-right-radius: 4px;
   }
-  .chat-bubble.user.is-collapsed::after {
+  .chat-bubble.user .chat-bubble-body.is-collapsed::after {
     background: linear-gradient(transparent, #14b8c8);
   }
   .chat-bubble.assistant {
@@ -132,7 +135,7 @@
     border-bottom-left-radius: 4px;
     color: #334155;
   }
-  .chat-bubble.assistant.is-collapsed::after {
+  .chat-bubble.assistant .chat-bubble-body.is-collapsed::after {
     background: linear-gradient(transparent, #fff);
   }
   .chat-bubble.system-error {
@@ -141,17 +144,19 @@
     border: 1px solid #fecdd3;
     color: #be123c;
   }
-  .chat-bubble.system-error.is-collapsed::after {
+  .chat-bubble.system-error .chat-bubble-body.is-collapsed::after {
     background: linear-gradient(transparent, #fff1f2);
   }
   .chat-expand {
     position: relative;
-    z-index: 1;
+    z-index: 2;
     display: inline-flex;
+    align-items: center;
+    gap: 4px;
     margin-top: 10px;
     border: 0;
     border-radius: 999px;
-    padding: 4px 10px;
+    padding: 5px 12px;
     font: inherit;
     font-size: 0.75rem;
     font-weight: 700;
@@ -393,6 +398,22 @@
     body.textContent = text || '';
     div.appendChild(body);
 
+    if (isLongText(text)) {
+      body.classList.add('is-collapsed');
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'chat-expand';
+      btn.textContent = 'Show more';
+      btn.addEventListener('click', function () {
+        const collapsed = body.classList.toggle('is-collapsed');
+        btn.textContent = collapsed ? 'Show more' : 'Show less';
+        if (!collapsed) {
+          div.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        }
+      });
+      div.appendChild(btn);
+    }
+
     if (Array.isArray(images) && images.length) {
       images.forEach(function (img) {
         if (!img || !img.url) return;
@@ -425,19 +446,6 @@
       m.className = 'chat-meta';
       m.textContent = meta;
       div.appendChild(m);
-    }
-
-    if (isLongText(text)) {
-      div.classList.add('is-collapsed');
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'chat-expand';
-      btn.textContent = 'Show more';
-      btn.addEventListener('click', function () {
-        const collapsed = div.classList.toggle('is-collapsed');
-        btn.textContent = collapsed ? 'Show more' : 'Show less';
-      });
-      div.appendChild(btn);
     }
 
     messagesEl.appendChild(div);
@@ -478,6 +486,10 @@
     fd.append('generate_image', imageMode ? 'true' : 'false');
     pendingFiles.forEach(function (f) { fd.append('files', f); });
 
+    const csrfMeta = document.querySelector('meta[name="csrf-token"]');
+    const csrfToken = csrfMeta ? csrfMeta.getAttribute('content') : '';
+    if (csrfToken) fd.append('_csrf', csrfToken);
+
     input.value = '';
     autoGrow();
     pendingFiles = [];
@@ -498,7 +510,8 @@
       const res = await fetch('/admin/chat/message', {
         method: 'POST',
         body: fd,
-        credentials: 'same-origin'
+        credentials: 'same-origin',
+        headers: csrfToken ? { 'X-CSRF-Token': csrfToken } : {}
       });
       const json = await res.json();
       const typingEl = document.getElementById('chat-typing');

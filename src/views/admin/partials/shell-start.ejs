@@ -9,6 +9,7 @@
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link href="/public/css/admin.css" rel="stylesheet" />
   <link href="https://cdn.datatables.net/1.13.8/css/dataTables.bootstrap5.min.css" rel="stylesheet" />
+  <meta name="csrf-token" content="<%= typeof csrfToken !== 'undefined' && csrfToken ? csrfToken : '' %>" />
 </head>
 <body class="app-body">
   <div class="app-root">
@@ -92,6 +93,7 @@
             <i class="bi bi-key"></i>
           </a>
           <form method="post" action="/admin/logout" class="d-inline">
+            <%- include('./csrf') %>
             <button class="btn btn-sm btn-light-danger" type="submit">Logout</button>
           </form>
         </div>

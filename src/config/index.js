@@ -58,9 +58,19 @@ const config = {
   jwtSecret: required('JWT_SECRET', 'change_this_to_a_long_random_secret'),
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || '1d',
   adminSessionSecret: required('ADMIN_SESSION_SECRET', 'change_this_admin_session_secret'),
+  /** Idle timeout: logout after no activity (default 1 hour) */
+  adminSessionIdleMs: Number(process.env.ADMIN_SESSION_IDLE_MS || 60 * 60 * 1000),
+  /** Absolute max session lifetime (default 8 hours) */
+  adminSessionMaxMs: Number(process.env.ADMIN_SESSION_MAX_MS || 8 * 60 * 60 * 1000),
+  /** bcrypt cost — salt is generated automatically per hash */
+  bcryptRounds: Number(process.env.BCRYPT_ROUNDS || 12),
   maxUploadMb: Number(process.env.MAX_UPLOAD_MB || 10),
   uploadsDir: path.join(projectRoot, 'uploads'),
   projectRoot,
+  corsOrigins: String(process.env.CORS_ORIGIN || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean),
   db: {
     server: required('DB_SERVER', '10.44.200.72'),
     user: required('DB_USER', 'sa'),

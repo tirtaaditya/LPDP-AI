@@ -7,6 +7,7 @@
   </div>
   <div class="card-body-pad">
     <form method="post" action="<%= mode === 'create' ? '/admin/users' : '/admin/users/' + user.id %>" class="row g-3" style="max-width:640px;">
+      <%- include('../partials/csrf') %>
       <div class="col-md-6">
         <label class="form-label">Username</label>
         <input class="form-control" name="username" value="<%= user.username || '' %>" required />
@@ -22,7 +23,16 @@
         <label class="form-label">
           <%= mode === 'create' ? 'Password' : 'New password (optional)' %>
         </label>
-        <input class="form-control" type="password" name="password" <%= mode === 'create' ? 'required' : '' %> />
+        <input
+          class="form-control"
+          type="password"
+          name="password"
+          minlength="8"
+          <%= mode === 'create' ? 'required' : '' %>
+        />
+        <div class="form-text">
+          Password di-hash bcrypt; salt unik disimpan terpisah di kolom <code>password_salt</code>. Minimal 8 karakter.
+        </div>
       </div>
       <% if (mode === 'edit') { %>
         <div class="col-md-6">

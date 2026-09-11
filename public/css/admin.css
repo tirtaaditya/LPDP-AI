@@ -1069,6 +1069,66 @@ body.sidebar-collapsed .aside-menu a.active {
   color: #8aa0b5;
 }
 
+.ai-captcha {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.ai-captcha-visual {
+  flex: 1 1 auto;
+  min-width: 160px;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid rgba(56, 189, 248, 0.22);
+  background: #ecfeff;
+  line-height: 0;
+}
+
+.ai-captcha-visual svg {
+  display: block;
+  width: 100%;
+  height: 56px;
+}
+
+.ai-captcha-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.ai-captcha-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid rgba(56, 189, 248, 0.28);
+  background: rgba(2, 12, 28, 0.75);
+  color: #e0f2fe;
+  border-radius: 10px;
+  padding: 0.55rem 0.75rem;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.ai-captcha-btn:hover {
+  border-color: rgba(56, 189, 248, 0.55);
+  color: #7dd3fc;
+}
+
+.ai-captcha-btn:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.ai-captcha-hint {
+  margin-top: 8px;
+  font-size: 0.75rem;
+  color: #7c93a8;
+}
+
 .ai-input {
   position: relative;
 }

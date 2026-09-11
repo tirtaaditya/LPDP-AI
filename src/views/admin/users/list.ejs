@@ -39,8 +39,10 @@
             <td><%= u.created_at %></td>
             <td class="text-end text-nowrap">
               <a href="/admin/users/<%= u.id %>/edit" class="btn btn-sm btn-light-primary">Edit</a>
-              <form method="post" action="/admin/users/<%= u.id %>/delete" class="d-inline"
-                    onsubmit="return confirm('Delete user <%= u.username %>?');">
+              <form method="post" action="/admin/users/<%= u.id %>/delete" class="d-inline js-confirm-submit"
+                    data-confirm="Delete this user?"
+                    data-label="<%= u.username %>">
+                <%- include('../partials/csrf') %>
                 <button type="submit" class="btn btn-sm btn-light-danger">Delete</button>
               </form>
             </td>

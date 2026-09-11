@@ -27,6 +27,18 @@
   <script src="https://cdn.datatables.net/1.13.8/js/dataTables.bootstrap5.min.js"></script>
   <script>
     (function () {
+      document.querySelectorAll('form.js-confirm-submit').forEach(function (form) {
+        form.addEventListener('submit', function (e) {
+          var msg = form.getAttribute('data-confirm') || 'Are you sure?';
+          var label = form.getAttribute('data-label');
+          if (label) msg = msg + ' (' + label + ')';
+          if (!window.confirm(msg)) e.preventDefault();
+        });
+      });
+    })();
+  </script>
+  <script>
+    (function () {
       var KEY = 'lpdp-sidebar-collapsed';
       var LEGACY_KEY = 'lpdp-sidebar-hidden';
       var root = document.body;

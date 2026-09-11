@@ -51,23 +51,69 @@ async function loginAdmin(username, password) {
   return db.verifyUserCredentials(username, password, 'admin');
 }
 
-function signAdminSession(user) {
+/**
+ * Admin session JWT with sliding idle timeout (lastActivity)
+ * and absolute max lifetime (issuedAtMs).
+ */
+function signAdminSession(user, opts = {}) {
+  const now = Date.now();
+  const issuedAtMs = opts.issuedAtMs || now;
+  const lastActivity = opts.lastActivity || now;
+  const remainingMs = Math.max(
+    1000,
+    Math.min(
+      config.adminSessionIdleMs + 60_000,
+      issuedAtMs + config.adminSessionMaxMs - now
+    )
+  );
+
   return jwt.sign(
     {
-      sub: user.username,
-      uid: user.id,
+      sub: user.username || user.sub,
+      uid: user.id ?? user.uid,
       role: 'admin',
       typ: 'admin_session',
+      lastActivity,
+      issuedAtMs,
     },
     config.adminSessionSecret,
-    { expiresIn: '8h' }
+    { expiresIn: Math.ceil(remainingMs / 1000) }
   );
 }
 
 function verifyAdminSession(token) {
   const payload = jwt.verify(token, config.adminSessionSecret);
-  if (payload.role !== 'admin') throw new Error('Invalid admin session');
-  return payload;
+  if (payload.role !== 'admin' || payload.typ !== 'admin_session') {
+    const err = new Error('Invalid admin session');
+    err.code = 'SESSION_EXPIRED';
+    throw err;
+  }
+
+  const now = Date.now();
+  const issuedAtMs = Number(payload.issuedAtMs) || (payload.iat ? payload.iat * 1000 : now);
+  const lastActivity = Number(payload.lastActivity) || issuedAtMs;
+
+  if (now - issuedAtMs > config.adminSessionMaxMs) {
+    const err = new Error('Session expired');
+    err.code = 'SESSION_EXPIRED';
+    throw err;
+  }
+
+  if (now - lastActivity > config.adminSessionIdleMs) {
+    const err = new Error('Session idle timeout');
+    err.code = 'SESSION_IDLE';
+    throw err;
+  }
+
+  return { ...payload, issuedAtMs, lastActivity };
+}
+
+/** Re-issue cookie JWT with refreshed lastActivity (sliding 1h idle). */
+function touchAdminSession(payload) {
+  return signAdminSession(payload, {
+    issuedAtMs: payload.issuedAtMs,
+    lastActivity: Date.now(),
+  });
 }
 
 module.exports = {
@@ -78,4 +124,5 @@ module.exports = {
   loginAdmin,
   signAdminSession,
   verifyAdminSession,
+  touchAdminSession,
 };

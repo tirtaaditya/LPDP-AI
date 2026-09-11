@@ -1,5 +1,4 @@
 const sql = require('mssql');
-const bcrypt = require('bcryptjs');
 const config = require('../config');
 
 let poolPromise;
@@ -40,6 +39,7 @@ async function migrate() {
         id INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
         username NVARCHAR(100) NOT NULL UNIQUE,
         password_hash NVARCHAR(255) NOT NULL,
+        password_salt NVARCHAR(128) NULL,
         role NVARCHAR(20) NOT NULL,
         is_active BIT NOT NULL CONSTRAINT DF_users_active DEFAULT 1,
         created_at DATETIME2 NOT NULL CONSTRAINT DF_users_created DEFAULT SYSUTCDATETIME(),
@@ -196,6 +196,11 @@ async function migrate() {
        AND COL_LENGTH('dbo.ai_extract_logs', 'cost_idr') IS NULL
       ALTER TABLE dbo.ai_extract_logs ADD cost_idr DECIMAL(18, 2) NULL;
   `);
+  await pool.request().query(`
+    IF OBJECT_ID('dbo.users', 'U') IS NOT NULL
+       AND COL_LENGTH('dbo.users', 'password_salt') IS NULL
+      ALTER TABLE dbo.users ADD password_salt NVARCHAR(128) NULL;
+  `);
 }
 
 async function seed() {
@@ -239,11 +244,31 @@ async function seed() {
     { username: 'api_user', password: 'Api@LPDP2026', role: 'api' },
   ];
 
+  const { comparePassword, isLegacyHash } = require('../utils/password');
+
   for (const u of seedUsers) {
     const existing = await findUserByUsername(u.username);
     if (!existing) {
       await createUser(u.username, u.password, u.role);
       console.log(`[db] Seeded user '${u.username}' role=${u.role}`);
+      continue;
+    }
+
+    // Existing seed users without password_salt → migrate if still on default password
+    if (isLegacyHash(existing.password_salt)) {
+      const stillDefault = await comparePassword(
+        u.password,
+        existing.password_hash,
+        null
+      );
+      if (stillDefault) {
+        await updateUserPassword(existing.id, u.password);
+        console.log(`[db] Migrated password_salt for seed user '${u.username}'`);
+      } else {
+        console.log(
+          `[db] User '${u.username}' still legacy hash (custom password) — will upgrade on next successful login`
+        );
+      }
     }
   }
 }
@@ -292,7 +317,7 @@ async function findUserByUsername(username) {
     .request()
     .input('username', sql.NVarChar(100), username)
     .query(`
-      SELECT TOP 1 id, username, password_hash, role, is_active, created_at, updated_at
+      SELECT TOP 1 id, username, password_hash, password_salt, role, is_active, created_at, updated_at
       FROM dbo.users WHERE username = @username
     `);
   return result.recordset[0] || null;
@@ -304,7 +329,7 @@ async function findUserById(id) {
     .request()
     .input('id', sql.Int, id)
     .query(`
-      SELECT TOP 1 id, username, password_hash, role, is_active, created_at, updated_at
+      SELECT TOP 1 id, username, password_hash, password_salt, role, is_active, created_at, updated_at
       FROM dbo.users WHERE id = @id
     `);
   return result.recordset[0] || null;
@@ -335,31 +360,39 @@ async function createUser(username, password, role) {
   if (!['admin', 'api'].includes(role)) {
     throw new Error('role must be admin or api');
   }
-  const passwordHash = bcrypt.hashSync(password, 10);
+  const { hashPassword, validatePassword } = require('../utils/password');
+  validatePassword(password);
+  const { hash: passwordHash, salt: passwordSalt } = await hashPassword(password);
   const pool = await getPool();
   const result = await pool
     .request()
     .input('username', sql.NVarChar(100), username.trim())
     .input('password_hash', sql.NVarChar(255), passwordHash)
+    .input('password_salt', sql.NVarChar(128), passwordSalt)
     .input('role', sql.NVarChar(20), role)
     .query(`
-      INSERT INTO dbo.users (username, password_hash, role, is_active)
+      INSERT INTO dbo.users (username, password_hash, password_salt, role, is_active)
       OUTPUT INSERTED.id, INSERTED.username, INSERTED.role, INSERTED.is_active
-      VALUES (@username, @password_hash, @role, 1)
+      VALUES (@username, @password_hash, @password_salt, @role, 1)
     `);
   return result.recordset[0];
 }
 
 async function updateUserPassword(id, password) {
-  const passwordHash = bcrypt.hashSync(password, 10);
+  const { hashPassword, validatePassword } = require('../utils/password');
+  validatePassword(password);
+  const { hash: passwordHash, salt: passwordSalt } = await hashPassword(password);
   const pool = await getPool();
   await pool
     .request()
     .input('id', sql.Int, id)
     .input('password_hash', sql.NVarChar(255), passwordHash)
+    .input('password_salt', sql.NVarChar(128), passwordSalt)
     .query(`
       UPDATE dbo.users
-      SET password_hash = @password_hash, updated_at = SYSUTCDATETIME()
+      SET password_hash = @password_hash,
+          password_salt = @password_salt,
+          updated_at = SYSUTCDATETIME()
       WHERE id = @id
     `);
 }
@@ -463,8 +496,29 @@ async function verifyUserCredentials(username, password, expectedRole = null) {
   const user = await findUserByUsername(username);
   if (!user || !user.is_active) return null;
   if (expectedRole && user.role !== expectedRole) return null;
-  const ok = bcrypt.compareSync(password, user.password_hash);
+
+  const { comparePassword, isLegacyHash } = require('../utils/password');
+  const legacy = isLegacyHash(user.password_salt);
+  const ok = await comparePassword(
+    password,
+    user.password_hash,
+    legacy ? null : user.password_salt
+  );
   if (!ok) return null;
+
+  // Old accounts (no password_salt): keep login working, then upgrade hash+salt
+  if (legacy) {
+    try {
+      await updateUserPassword(user.id, password);
+      console.log(`[db] Upgraded password_salt for user '${user.username}' after login`);
+    } catch (err) {
+      console.error(
+        `[db] Login OK but failed to upgrade password_salt for '${user.username}':`,
+        err.message
+      );
+    }
+  }
+
   return user;
 }
 

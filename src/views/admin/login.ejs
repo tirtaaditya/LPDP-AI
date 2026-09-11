@@ -50,6 +50,7 @@
 
         <section class="ai-panel">
           <form class="ai-form" method="post" action="/admin/login" autocomplete="on">
+            <%- include('partials/csrf') %>
             <div class="ai-form-title">
               <h2>Authenticate</h2>
               <p>Admin identity required</p>
@@ -78,6 +79,41 @@
               </div>
             </label>
 
+            <div class="ai-field ai-captcha-field">
+              <span>Captcha (angka)</span>
+              <div class="ai-captcha">
+                <div class="ai-captcha-visual" id="captcha-visual">
+                  <%- captchaSvg %>
+                </div>
+                <div class="ai-captcha-actions">
+                  <button type="button" class="ai-captcha-btn" id="captcha-audio" title="Putar suara">
+                    <i class="bi bi-volume-up-fill"></i>
+                    <span>Suara</span>
+                  </button>
+                  <button type="button" class="ai-captcha-btn" id="captcha-refresh" title="Ganti captcha">
+                    <i class="bi bi-arrow-clockwise"></i>
+                    <span>Ganti</span>
+                  </button>
+                </div>
+              </div>
+              <div class="ai-input">
+                <i class="bi bi-shield-check"></i>
+                <input
+                  id="captcha"
+                  name="captcha"
+                  type="text"
+                  inputmode="numeric"
+                  pattern="[0-9]{5}"
+                  maxlength="5"
+                  minlength="5"
+                  required
+                  autocomplete="off"
+                  placeholder="Ketik 5 digit angka"
+                />
+              </div>
+              <div class="ai-captcha-hint">Masukkan angka yang ditampilkan, atau dengarkan via tombol Suara.</div>
+            </div>
+
             <button class="ai-submit" type="submit">
               <span>Initialize Session</span>
               <i class="bi bi-lightning-charge-fill"></i>
@@ -90,6 +126,75 @@
     </main>
   </div>
 
+  <script>
+    (function () {
+      const visual = document.getElementById('captcha-visual');
+      const refreshBtn = document.getElementById('captcha-refresh');
+      const audioBtn = document.getElementById('captcha-audio');
+      const input = document.getElementById('captcha');
+      let audioEl = null;
+
+      if (refreshBtn && visual) {
+        refreshBtn.addEventListener('click', async function () {
+          try {
+            refreshBtn.disabled = true;
+            const res = await fetch('/admin/captcha/refresh', {
+              credentials: 'same-origin',
+              headers: { Accept: 'application/json' },
+            });
+            const json = await res.json();
+            if (json && json.data && json.data.svg) {
+              visual.innerHTML = json.data.svg;
+              if (input) {
+                input.value = '';
+                input.focus();
+              }
+            }
+          } catch (err) {
+            console.error(err);
+          } finally {
+            refreshBtn.disabled = false;
+          }
+        });
+      }
+
+      if (audioBtn) {
+        audioBtn.addEventListener('click', function () {
+          const digitNames = {
+            0: 'nol', 1: 'satu', 2: 'dua', 3: 'tiga', 4: 'empat',
+            5: 'lima', 6: 'enam', 7: 'tujuh', 8: 'delapan', 9: 'sembilan'
+          };
+          const digits = visual
+            ? Array.from(visual.querySelectorAll('text'))
+                .map(function (el) { return String(el.textContent || '').trim(); })
+                .join('')
+            : '';
+
+          if (digits && window.speechSynthesis) {
+            window.speechSynthesis.cancel();
+            const spoken = digits
+              .split('')
+              .map(function (d) { return digitNames[d] || d; })
+              .join(', ');
+            const utter = new SpeechSynthesisUtterance(spoken);
+            utter.lang = 'id-ID';
+            utter.rate = 0.9;
+            window.speechSynthesis.speak(utter);
+            return;
+          }
+
+          if (audioEl) {
+            audioEl.pause();
+            audioEl = null;
+          }
+          audioEl = new Audio('/admin/captcha/audio?ts=' + Date.now());
+          audioEl.play().catch(function (err) {
+            console.error(err);
+          });
+        });
+      }
+    })();
+  </script>
   <script>
     (function () {
       const canvas = document.getElementById('ai-net');

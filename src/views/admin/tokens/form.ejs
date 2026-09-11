@@ -7,6 +7,7 @@
   </div>
   <div class="card-body-pad">
     <form method="post" action="/admin/tokens" class="row g-3" style="max-width:640px;">
+      <%- include('../partials/csrf') %>
       <div class="col-md-6">
         <label class="form-label">API User</label>
         <select class="form-select" name="user_id" required>

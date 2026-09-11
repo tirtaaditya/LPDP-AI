@@ -45,11 +45,13 @@
             <td class="text-end text-nowrap">
               <% if (t.is_active) { %>
                 <form method="post" action="/admin/tokens/<%= t.id %>/revoke" class="d-inline">
+                  <%- include('../partials/csrf') %>
                   <button type="submit" class="btn btn-sm btn-light-warning">Revoke</button>
                 </form>
               <% } %>
-              <form method="post" action="/admin/tokens/<%= t.id %>/delete" class="d-inline"
-                    onsubmit="return confirm('Delete this token permanently?');">
+              <form method="post" action="/admin/tokens/<%= t.id %>/delete" class="d-inline js-confirm-submit"
+                    data-confirm="Delete this token permanently?">
+                <%- include('../partials/csrf') %>
                 <button type="submit" class="btn btn-sm btn-light-danger">Delete</button>
               </form>
             </td>

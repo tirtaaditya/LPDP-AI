@@ -178,7 +178,23 @@ async function extract(req, res) {
     });
 
     console.error('Extract error:', err);
-    return failure(res, err.message || 'OpenAI request failed', httpStatus);
+    const { safeClientMessage } = require('../utils/safeError');
+    const clientMsg =
+      err.code &&
+      [
+        'OPENAI_NOT_CONFIGURED',
+        'OLLAMA_NOT_CONFIGURED',
+        'OLLAMA_SCANNED_PDF',
+        'FILE_TYPE_NOT_ALLOWED',
+        'FILE_TOO_LARGE',
+        'FILE_EMPTY',
+        'FILE_URL_INVALID',
+        'FILE_DOWNLOAD_FAILED',
+        'FILE_TOO_MANY',
+      ].includes(err.code)
+        ? err.message
+        : safeClientMessage(err, httpStatus >= 500 ? 'AI request failed' : err.message || 'Request failed');
+    return failure(res, clientMsg, httpStatus);
   }
 }
 

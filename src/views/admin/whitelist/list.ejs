@@ -35,8 +35,10 @@
             <td><%= row.created_at %></td>
             <td class="text-end text-nowrap">
               <a href="/admin/whitelist/<%= row.id %>/edit" class="btn btn-sm btn-light-primary">Edit</a>
-              <form method="post" action="/admin/whitelist/<%= row.id %>/delete" class="d-inline"
-                    onsubmit="return confirm('Delete IP <%= row.ip %>?');">
+              <form method="post" action="/admin/whitelist/<%= row.id %>/delete" class="d-inline js-confirm-submit"
+                    data-confirm="Delete this IP?"
+                    data-label="<%= row.ip %>">
+                <%- include('../partials/csrf') %>
                 <button type="submit" class="btn btn-sm btn-light-danger">Delete</button>
               </form>
             </td>
