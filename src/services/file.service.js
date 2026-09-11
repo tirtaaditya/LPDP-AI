@@ -354,7 +354,133 @@ async function downloadAndExtractMany(urls) {
       file_size: f.fileSize,
       ext: f.ext,
       scanned: Boolean(f.needsVision),
+      source: f.source || 'url',
     })),
+    visionFiles,
+  };
+}
+
+/**
+ * Process multipart uploads (multer files) — field name: file_uploads
+ */
+async function processMulterUploads(multerFiles = []) {
+  const list = Array.isArray(multerFiles) ? multerFiles : [];
+  if (!list.length) {
+    return {
+      hasFile: false,
+      fileName: null,
+      fileSize: null,
+      fileText: '',
+      files: [],
+      visionFiles: [],
+    };
+  }
+
+  if (list.length > MAX_FILES) {
+    for (const f of list) safeUnlink(f.path);
+    const err = new Error(`Too many file_uploads. Max ${MAX_FILES} files per request`);
+    err.code = 'FILE_TOO_MANY';
+    throw err;
+  }
+
+  const files = [];
+  try {
+    for (const file of list) {
+      const original = file.originalname || 'upload.bin';
+      const ext = path.extname(original).replace('.', '').toLowerCase();
+      const buffer = fs.readFileSync(file.path);
+      const extracted = await extractTextFromBuffer(buffer, ext, original);
+      files.push({
+        url: null,
+        fileName: original,
+        fileSize: buffer.length,
+        ext,
+        text: extracted.text,
+        needsVision: extracted.needsVision,
+        mime: extracted.mime || mimeFromExt(ext) || file.mimetype,
+        buffer: extracted.needsVision ? buffer : null,
+        source: 'upload',
+      });
+    }
+  } finally {
+    for (const f of list) safeUnlink(f.path);
+  }
+
+  const textParts = files
+    .filter((f) => f.text)
+    .map(
+      (f, i) =>
+        `--- FILE ${i + 1} (upload): ${f.fileName} ---\n\n${f.text}`
+    );
+
+  const visionNotes = files
+    .filter((f) => f.needsVision)
+    .map((f) => {
+      const kind = isImageExt(f.ext) ? 'image' : 'scanned PDF';
+      return `--- FILE (${kind}, upload, sent to AI vision): ${f.fileName} ---`;
+    });
+
+  const combinedText = [...textParts, ...visionNotes].join('\n\n');
+  const visionFiles = files
+    .filter((f) => f.needsVision && f.buffer)
+    .map((f) => ({
+      fileName: f.fileName,
+      mime: f.mime || mimeFromExt(f.ext),
+      buffer: f.buffer,
+      url: null,
+      kind: isImageExt(f.ext) ? 'image' : 'pdf',
+    }));
+
+  return {
+    hasFile: true,
+    fileName: files.map((f) => f.fileName).join(', '),
+    fileSize: files.reduce((sum, f) => sum + f.fileSize, 0),
+    fileText:
+      combinedText ||
+      (visionFiles.length ? '[Image/scanned file(s) — processed via OpenAI vision]' : ''),
+    files: files.map((f) => ({
+      url: null,
+      file_name: f.fileName,
+      file_size: f.fileSize,
+      ext: f.ext,
+      scanned: Boolean(f.needsVision),
+      source: 'upload',
+    })),
+    visionFiles,
+  };
+}
+
+/** Merge URL downloads + multipart uploads (max MAX_FILES total). */
+function mergeFileMeta(a, b) {
+  const empty = {
+    hasFile: false,
+    fileName: null,
+    fileSize: null,
+    fileText: '',
+    files: [],
+    visionFiles: [],
+  };
+  const left = a || empty;
+  const right = b || empty;
+  const files = [...(left.files || []), ...(right.files || [])];
+  if (files.length > MAX_FILES) {
+    const err = new Error(
+      `Too many files (file_urls + file_uploads). Max ${MAX_FILES} files per request`
+    );
+    err.code = 'FILE_TOO_MANY';
+    throw err;
+  }
+  if (!files.length) return empty;
+
+  const textParts = [left.fileText, right.fileText].filter((t) => String(t || '').trim());
+  const visionFiles = [...(left.visionFiles || []), ...(right.visionFiles || [])];
+
+  return {
+    hasFile: true,
+    fileName: files.map((f) => f.file_name).filter(Boolean).join(', '),
+    fileSize: files.reduce((sum, f) => sum + (Number(f.file_size) || 0), 0),
+    fileText: textParts.join('\n\n'),
+    files,
     visionFiles,
   };
 }
@@ -383,6 +509,8 @@ module.exports = {
   safeUnlink,
   parseFileUrls,
   downloadAndExtractMany,
+  processMulterUploads,
+  mergeFileMeta,
   extractTextFromBuffer,
   normalizeAllowedTypes,
   mimeFromExt,

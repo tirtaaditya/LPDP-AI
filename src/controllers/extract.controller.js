@@ -38,6 +38,16 @@ async function saveLog(payload) {
   }
 }
 
+function cleanupUploads(files) {
+  for (const f of files || []) {
+    try {
+      fileService.safeUnlink(f.path);
+    } catch {
+      // ignore
+    }
+  }
+}
+
 async function extract(req, res) {
   const started = Date.now();
   const prompt = req.body?.prompt;
@@ -45,14 +55,16 @@ async function extract(req, res) {
   const auth = authMeta(req);
   const ip = req.clientIp || req.ip;
   const fileUrls = fileService.parseFileUrls(req.body || {});
+  const uploads = Array.isArray(req.files) ? req.files : [];
 
   if (!prompt || !String(prompt).trim()) {
+    cleanupUploads(uploads);
     await saveLog({
       requestId: req.requestId,
       ...auth,
       prompt: prompt || '',
       schemaHint,
-      hasFile: fileUrls.length > 0,
+      hasFile: fileUrls.length > 0 || uploads.length > 0,
       fileName: fileUrls.length ? fileUrls.join(' | ') : null,
       fileSize: null,
       fileText: null,
@@ -76,9 +88,24 @@ async function extract(req, res) {
   };
 
   try {
-    if (fileUrls.length) {
-      fileMeta = await fileService.downloadAndExtractMany(fileUrls);
+    if (fileUrls.length + uploads.length > fileService.MAX_FILES) {
+      const err = new Error(
+        `Too many files (file_urls + file_uploads). Max ${fileService.MAX_FILES} files per request`
+      );
+      err.code = 'FILE_TOO_MANY';
+      throw err;
     }
+
+    const [urlMeta, uploadMeta] = await Promise.all([
+      fileUrls.length
+        ? fileService.downloadAndExtractMany(fileUrls)
+        : Promise.resolve(null),
+      uploads.length
+        ? fileService.processMulterUploads(uploads)
+        : Promise.resolve(null),
+    ]);
+
+    fileMeta = fileService.mergeFileMeta(urlMeta, uploadMeta);
 
     const result = await openaiService.extractFromPrompt({
       prompt,
@@ -102,6 +129,7 @@ async function extract(req, res) {
       fileName: fileMeta.hasFile
         ? JSON.stringify({
             urls: fileUrls,
+            uploads: (fileMeta.files || []).filter((f) => f.source === 'upload'),
             files: fileMeta.files,
           })
         : null,
@@ -144,6 +172,8 @@ async function extract(req, res) {
       },
     });
   } catch (err) {
+    cleanupUploads(uploads);
+
     let httpStatus = 502;
     if (err.code === 'OPENAI_NOT_CONFIGURED') httpStatus = 503;
     if (err.code === 'OLLAMA_NOT_CONFIGURED' || err.code === 'OLLAMA_SCANNED_PDF') httpStatus = 400;
@@ -158,6 +188,9 @@ async function extract(req, res) {
         'FILE_URL_INVALID',
         'FILE_DOWNLOAD_FAILED',
         'FILE_TOO_MANY',
+        'LIMIT_FILE_SIZE',
+        'LIMIT_FILE_COUNT',
+        'LIMIT_UNEXPECTED_FILE',
       ].includes(err.code)
     ) {
       httpStatus = 400;
@@ -168,8 +201,18 @@ async function extract(req, res) {
       ...auth,
       prompt,
       schemaHint,
-      hasFile: fileUrls.length > 0,
-      fileName: fileUrls.length ? JSON.stringify({ urls: fileUrls, files: fileMeta.files }) : null,
+      hasFile: fileUrls.length > 0 || uploads.length > 0,
+      fileName:
+        fileUrls.length || uploads.length
+          ? JSON.stringify({
+              urls: fileUrls,
+              uploads: uploads.map((f) => ({
+                file_name: f.originalname,
+                file_size: f.size,
+              })),
+              files: fileMeta.files,
+            })
+          : null,
       fileSize: fileMeta.fileSize,
       fileText: fileMeta.fileText || null,
       aiResponse: null,

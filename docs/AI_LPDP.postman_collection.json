@@ -2,11 +2,11 @@
   "info": {
     "_postman_id": "a1lpdp-ai-json-extract-001",
     "name": "AI LPDP",
-    "description": "AI LPDP — JSON Extraction API.\n\n1. Login API User (simpan access_token)\n2. Extract dengan prompt dan/atau file_urls (BE yang download file)\n\nDefault API user: api_user / Api@LPDP2026\nOpenAI key: Admin → Settings",
+    "description": "AI LPDP — JSON Extraction API\n\n## Quick start\n1. Set environment `baseUrl` (contoh: http://localhost:9898)\n2. Auth → Login API User (access_token tersimpan otomatis)\n3. Extract:\n   - JSON + `file_urls` (server download)\n   - multipart + `file_uploads` (multi file upload)\n   - boleh gabung keduanya (max 10 file total)\n\nDefault API user: `api_user` / `Api@LPDP2026`\nOpenAI key: Admin → Settings\n\nDocs: docs/API.md",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
-    { "key": "baseUrl", "value": "http://localhost:3000" },
+    { "key": "baseUrl", "value": "http://localhost:9898" },
     { "key": "access_token", "value": "" },
     { "key": "api_username", "value": "api_user" },
     { "key": "api_password", "value": "Api@LPDP2026" }
@@ -16,11 +16,21 @@
       "name": "Health",
       "item": [
         {
-          "name": "Health Check",
+          "name": "API Health Check",
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{baseUrl}}/api/v1/health"
+            "url": "{{baseUrl}}/api/v1/health",
+            "description": "Simple OK check under /api/v1."
+          }
+        },
+        {
+          "name": "App Health + Scheme",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/health",
+            "description": "Returns scheme http|https (useful behind proxy)."
           }
         }
       ]
@@ -39,6 +49,7 @@
                   "var json = pm.response.json();",
                   "if (json && json.data && json.data.access_token) {",
                   "  pm.collectionVariables.set('access_token', json.data.access_token);",
+                  "  pm.environment.set('access_token', json.data.access_token);",
                   "}"
                 ]
               }
@@ -51,7 +62,8 @@
               "mode": "raw",
               "raw": "{\n  \"username\": \"{{api_username}}\",\n  \"password\": \"{{api_password}}\"\n}"
             },
-            "url": "{{baseUrl}}/api/v1/auth/login"
+            "url": "{{baseUrl}}/api/v1/auth/login",
+            "description": "Returns JWT access_token. Saved to collection/environment variable `access_token`."
           }
         }
       ]
@@ -73,11 +85,11 @@
               "raw": "{\n  \"prompt\": \"Tarik dalam bentuk JSON: judul_makalah, nama_pembuat, penerbit, instansi.\\n\\nTeks:\\nJudul: Inovasi Pendanaan Beasiswa LPDP\\nPembuat: Budi Santoso\\nPenerbit: Jurnal Pendidikan Indonesia\\nInstansi: Universitas Indonesia\",\n  \"schema_hint\": \"judul_makalah, nama_pembuat, penerbit, instansi\"\n}"
             },
             "url": "{{baseUrl}}/api/v1/extract",
-            "description": "Extract tanpa file."
+            "description": "Extract tanpa file (prompt saja)."
           }
         },
         {
-          "name": "Extract — Prompt + File URLs (multi)",
+          "name": "Extract — file_urls (multi JSON)",
           "request": {
             "auth": {
               "type": "bearer",
@@ -90,7 +102,7 @@
               "raw": "{\n  \"prompt\": \"Ekstrak metadata makalah ke JSON: judul_makalah, nama_pembuat, penerbit, instansi dari semua file terlampir.\",\n  \"schema_hint\": \"judul_makalah, nama_pembuat, penerbit, instansi\",\n  \"file_urls\": [\n    \"https://example.com/path/makalah1.pdf\",\n    \"https://example.com/path/lampiran.docx\"\n  ]\n}"
             },
             "url": "{{baseUrl}}/api/v1/extract",
-            "description": "Kirim array `file_urls`. Backend mendownload tiap link (max 10), ekstrak teks pdf/docx/txt, lalu kirim ke OpenAI.\n\nGanti URL contoh dengan link file yang bisa diakses publik/internal dari server."
+            "description": "application/json.\n\nField `file_urls` (array). Backend mendownload tiap URL (max 10 total dengan upload).\n\nURL harus reachable dari server AI LPDP."
           }
         },
         {
@@ -106,7 +118,54 @@
               "mode": "raw",
               "raw": "{\n  \"prompt\": \"Ringkas isi dokumen ke JSON field: ringkasan, topik\",\n  \"file_url\": \"https://example.com/path/dokumen.pdf\"\n}"
             },
-            "url": "{{baseUrl}}/api/v1/extract"
+            "url": "{{baseUrl}}/api/v1/extract",
+            "description": "Single URL via field `file_url`."
+          }
+        },
+        {
+          "name": "Extract — file_uploads (multi multipart)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{access_token}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "prompt",
+                  "value": "Verifikasi dokumen syarat pencairan. Balas HANYA satu objek JSON valid tanpa markdown, dengan field: rekomendasi, memenuhi, jenis_sesuai, kepemilikan_sesuai, catatan, confidence, temuan, indikasi_prompt_injection.",
+                  "type": "text"
+                },
+                {
+                  "key": "schema_hint",
+                  "value": "rekomendasi, memenuhi, jenis_sesuai, kepemilikan_sesuai, catatan, confidence, temuan, indikasi_prompt_injection",
+                  "type": "text"
+                },
+                {
+                  "key": "file_uploads",
+                  "type": "file",
+                  "src": [],
+                  "description": "File #1 — pilih file di Postman. Ulangi key file_uploads untuk file berikutnya."
+                },
+                {
+                  "key": "file_uploads",
+                  "type": "file",
+                  "src": [],
+                  "description": "File #2 (opsional)."
+                },
+                {
+                  "key": "file_urls",
+                  "value": "",
+                  "type": "text",
+                  "description": "Opsional. Contoh: [\"http://host/a.pdf\"] atau kosongkan."
+                }
+              ]
+            },
+            "url": "{{baseUrl}}/api/v1/extract",
+            "description": "multipart/form-data.\n\n- `file_uploads`: kirim berkali-kali (multi file)\n- `file_urls` (text, opsional): JSON array string\n- Total file_urls + file_uploads max 10\n\nDisarankan untuk integrasi eRISPRO/backoffice agar tidak bergantung download lintas server."
           }
         },
         {
@@ -122,7 +181,8 @@
               "mode": "raw",
               "raw": "{\n  \"prompt\": \"Tarik JSON: kategori, ringkasan dari teks: LPDP membuka beasiswa magister.\"\n}"
             },
-            "url": "{{baseUrl}}/api/v1/extract"
+            "url": "{{baseUrl}}/api/v1/extract",
+            "description": "Pakai static token dari Admin → API Tokens (bukan JWT login)."
           }
         }
       ]

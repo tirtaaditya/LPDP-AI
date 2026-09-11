@@ -84,6 +84,7 @@ Response contract:
 
 - API docs: [`docs/API.md`](./docs/API.md)
 - Postman collection **AI LPDP**: [`docs/AI_LPDP.postman_collection.json`](./docs/AI_LPDP.postman_collection.json)
-- Postman environment: [`docs/AI_LPDP.postman_environment.json`](./docs/AI_LPDP.postman_environment.json)
+- Postman environment (local): [`docs/AI_LPDP.postman_environment.json`](./docs/AI_LPDP.postman_environment.json)
+- Postman environment (prod): [`docs/AI_LPDP.postman_environment.production.json`](./docs/AI_LPDP.postman_environment.production.json)
 - Blueprint: `BLUEPRINT.md`
 - PM tracker: `PROJECT_TRACKER.md`
