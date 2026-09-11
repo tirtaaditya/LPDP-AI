@@ -14,12 +14,14 @@ if (!fs.existsSync(config.uploadsDir)) {
   fs.mkdirSync(config.uploadsDir, { recursive: true });
 }
 
+const CHAT_MAX_FILES = 15;
+
 function chatUpload(req, res, next) {
   Promise.all([fileService.getMaxUploadBytes(), fileService.getAllowedExtensions()])
     .then(([max, allowed]) => {
       const mw = multer({
         dest: config.uploadsDir,
-        limits: { fileSize: max, files: 5 },
+        limits: { fileSize: max, files: CHAT_MAX_FILES },
         fileFilter(req, file, cb) {
           const ext = path.extname(file.originalname || '').replace('.', '').toLowerCase();
           if (!allowed.includes(ext)) {
@@ -31,14 +33,18 @@ function chatUpload(req, res, next) {
           }
           return cb(null, true);
         },
-      }).array('files', 5);
+      }).array('files', CHAT_MAX_FILES);
 
       mw(req, res, (err) => {
         if (err) {
+          const message =
+            err.code === 'LIMIT_FILE_COUNT' || /too many files/i.test(err.message || '')
+              ? `Too many files. Max ${CHAT_MAX_FILES} files per chat message.`
+              : err.message || 'Upload failed';
           return res.status(400).json({
             status: 'error',
             data: null,
-            message: err.message || 'Upload failed',
+            message,
           });
         }
         return next();

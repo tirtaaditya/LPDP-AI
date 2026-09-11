@@ -112,7 +112,7 @@ Menampilkan ringkasan:
 **Fungsi**
 
 - Chat multi-turn dengan AI (konteks history di browser).
-- Lampirkan file (maks. **5**) sebagai konteks.
+- Lampirkan file (maks. **15**) sebagai konteks.
 - Mode **image** / perintah `/image …` untuk generate gambar (**butuh OpenAI**).
 - Mode **PDF** / perintah `/pdf …` untuk generate dokumen PDF (AI tulis isi → file unduhan).
 
