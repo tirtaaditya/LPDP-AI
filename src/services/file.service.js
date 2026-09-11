@@ -83,9 +83,21 @@ function guessExtension(urlObj, contentType, contentDisposition) {
   if (fromPath) return fromPath;
 
   if (contentDisposition) {
-    const match = /filename\*?=(?:UTF-8''|")?([^";]+)/i.exec(contentDisposition);
-    if (match?.[1]) {
-      const name = decodeURIComponent(match[1].replace(/"/g, ''));
+    const star = /filename\*=(?:UTF-8''|utf-8'')([^;]+)/i.exec(contentDisposition);
+    if (star?.[1]) {
+      try {
+        const name = decodeURIComponent(star[1].trim().replace(/^"|"$/g, ''));
+        const ext = path.extname(name).replace('.', '').toLowerCase();
+        if (ext) return ext;
+      } catch {
+        // ignore
+      }
+    }
+    const plain = /filename="([^"]+)"|filename=([^;]+)/i.exec(contentDisposition);
+    if (plain) {
+      const name = String(plain[1] || plain[2] || '')
+        .trim()
+        .replace(/^"|"$/g, '');
       const ext = path.extname(name).replace('.', '').toLowerCase();
       if (ext) return ext;
     }
@@ -233,12 +245,17 @@ async function downloadOne(urlString) {
       buffer: extracted.needsVision ? buffer : null,
     };
   } catch (err) {
+    if (err.code) throw err;
     if (err.name === 'AbortError') {
       const timeoutErr = new Error(`Download timeout: ${urlString}`);
       timeoutErr.code = 'FILE_DOWNLOAD_FAILED';
       throw timeoutErr;
     }
-    throw err;
+    const wrap = new Error(
+      `Failed to download file: ${err.message || 'network error'} (${urlString})`
+    );
+    wrap.code = 'FILE_DOWNLOAD_FAILED';
+    throw wrap;
   } finally {
     clearTimeout(timer);
   }

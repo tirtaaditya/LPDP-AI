@@ -147,6 +147,9 @@ async function extract(req, res) {
     let httpStatus = 502;
     if (err.code === 'OPENAI_NOT_CONFIGURED') httpStatus = 503;
     if (err.code === 'OLLAMA_NOT_CONFIGURED' || err.code === 'OLLAMA_SCANNED_PDF') httpStatus = 400;
+    if (err.code === 'OPENAI_API_ERROR' && err.status && err.status >= 400 && err.status < 500) {
+      httpStatus = err.status;
+    }
     if (
       [
         'FILE_TYPE_NOT_ALLOWED',
@@ -179,22 +182,17 @@ async function extract(req, res) {
 
     console.error('Extract error:', err);
     const { safeClientMessage } = require('../utils/safeError');
-    const clientMsg =
-      err.code &&
-      [
-        'OPENAI_NOT_CONFIGURED',
-        'OLLAMA_NOT_CONFIGURED',
-        'OLLAMA_SCANNED_PDF',
-        'FILE_TYPE_NOT_ALLOWED',
-        'FILE_TOO_LARGE',
-        'FILE_EMPTY',
-        'FILE_URL_INVALID',
-        'FILE_DOWNLOAD_FAILED',
-        'FILE_TOO_MANY',
-      ].includes(err.code)
-        ? err.message
-        : safeClientMessage(err, httpStatus >= 500 ? 'AI request failed' : err.message || 'Request failed');
-    return failure(res, clientMsg, httpStatus);
+    if (!err.code && (err.status || err.statusCode || err.error?.message)) {
+      err.code = 'OPENAI_API_ERROR';
+    }
+    const clientMsg = safeClientMessage(
+      { ...err, status: httpStatus },
+      httpStatus >= 500 ? 'AI request failed' : err.message || 'Request failed'
+    );
+    return failure(res, clientMsg, httpStatus, {
+      request_id: req.requestId || null,
+      error_code: err.code || null,
+    });
   }
 }
 

@@ -72,7 +72,7 @@ function buildTextPrompt(prompt, fileText, schemaHint, hasVisionFiles) {
   }
 
   content +=
-    '\n\nRespond with JSON only using keys "status" and "data". Put extracted fields inside "data".';
+    '\n\nRespond with valid JSON only. Do not wrap the response in markdown or code fences.';
 
   return content;
 }
@@ -186,20 +186,39 @@ async function extractFromPrompt({
         'Chat file attachment failed, trying OpenAI Files API fallback:',
         err.message
       );
-      completion = await extractWithUploadedFiles(client, {
-        model,
-        temperature,
-        maxTokens,
-        systemPrompt,
-        textPrompt,
-        visionFiles,
-      });
+      try {
+        completion = await extractWithUploadedFiles(client, {
+          model,
+          temperature,
+          maxTokens,
+          systemPrompt,
+          textPrompt,
+          visionFiles,
+        });
+      } catch (err2) {
+        const wrapped = new Error(
+          err2?.error?.message ||
+            err2.message ||
+            err?.error?.message ||
+            err.message ||
+            'OpenAI request failed'
+        );
+        wrapped.code = 'OPENAI_API_ERROR';
+        wrapped.status = err2.status || err2.statusCode || err.status || 502;
+        throw wrapped;
+      }
     } else if (provider === 'ollama') {
       // Some Ollama models reject response_format
       console.warn('Ollama json_object failed, retry without response_format:', err.message);
       completion = await client.chat.completions.create(basePayload);
     } else {
-      throw err;
+      const wrapped = new Error(
+        err?.error?.message || err.message || 'OpenAI request failed'
+      );
+      wrapped.code = 'OPENAI_API_ERROR';
+      wrapped.status = err.status || err.statusCode || 502;
+      wrapped.cause = err;
+      throw wrapped;
     }
   }
 
