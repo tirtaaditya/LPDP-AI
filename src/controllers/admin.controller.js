@@ -28,14 +28,14 @@ function pageLocals(req, extra = {}) {
   };
 }
 
-function issueLoginCaptcha(res) {
+function issueLoginCaptcha(req, res) {
   const captcha = createCaptcha();
-  res.cookie(CAPTCHA_COOKIE, captcha.token, captchaCookieOptions());
+  res.cookie(CAPTCHA_COOKIE, captcha.token, captchaCookieOptions(req));
   return captcha;
 }
 
-function renderLoginView(res, { error = null } = {}) {
-  const captcha = issueLoginCaptcha(res);
+function renderLoginView(req, res, { error = null } = {}) {
+  const captcha = issueLoginCaptcha(req, res);
   const captchaSvg = String(captcha.svg).replace(/^<\?xml[^>]*>\s*/i, '');
   return res.render('admin/login', {
     error,
@@ -50,10 +50,10 @@ function renderLogin(req, res) {
       authService.verifyAdminSession(req.cookies.admin_session);
       return res.redirect('/admin');
     } catch {
-      clearAdminCookie(res);
+      clearAdminCookie(req, res);
     }
   }
-  return renderLoginView(res, { error: req.query.error || null });
+  return renderLoginView(req, res, { error: req.query.error || null });
 }
 
 async function postLogin(req, res) {
@@ -62,7 +62,7 @@ async function postLogin(req, res) {
 
   if (!verifyCaptcha(captchaToken, captcha)) {
     res.status(400);
-    return renderLoginView(res, {
+    return renderLoginView(req, res, {
       error: 'Captcha salah atau kedaluwarsa. Coba lagi.',
     });
   }
@@ -70,14 +70,14 @@ async function postLogin(req, res) {
   const user = await authService.loginAdmin(username, password);
   if (!user) {
     res.status(401);
-    return renderLoginView(res, {
+    return renderLoginView(req, res, {
       error: 'Invalid username or password',
     });
   }
 
   res.clearCookie(CAPTCHA_COOKIE, { path: '/admin' });
   const token = authService.signAdminSession(user);
-  setAdminCookie(res, token);
+  setAdminCookie(req, res, token);
   return res.redirect('/admin');
 }
 
@@ -85,7 +85,7 @@ function captchaImage(req, res) {
   const token = req.cookies?.[CAPTCHA_COOKIE];
   const payload = readCaptcha(token);
   if (!payload) {
-    const captcha = issueLoginCaptcha(res);
+    const captcha = issueLoginCaptcha(req, res);
     res.setHeader('Content-Type', 'image/svg+xml');
     res.setHeader('Cache-Control', 'no-store');
     return res.send(captcha.svg);
@@ -99,7 +99,7 @@ function captchaAudio(req, res) {
   const token = req.cookies?.[CAPTCHA_COOKIE];
   const payload = readCaptcha(token);
   if (!payload) {
-    const captcha = issueLoginCaptcha(res);
+    const captcha = issueLoginCaptcha(req, res);
     res.setHeader('Content-Type', 'audio/wav');
     res.setHeader('Cache-Control', 'no-store');
     return res.send(captcha.wav);
@@ -110,7 +110,7 @@ function captchaAudio(req, res) {
 }
 
 function captchaRefresh(req, res) {
-  const captcha = issueLoginCaptcha(res);
+  const captcha = issueLoginCaptcha(req, res);
   res.setHeader('Cache-Control', 'no-store');
   return res.json({
     status: 'success',
@@ -121,7 +121,7 @@ function captchaRefresh(req, res) {
 }
 
 function logout(req, res) {
-  clearAdminCookie(res);
+  clearAdminCookie(req, res);
   return res.redirect('/admin/login');
 }
 

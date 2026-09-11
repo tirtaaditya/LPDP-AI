@@ -8,6 +8,56 @@ const apiRoutes = require('./routes/api.routes');
 const adminRoutes = require('./routes/admin.routes');
 const { requestLogger, errorHandler } = require('./middleware/errorHandler');
 const { csrfProtection } = require('./middleware/csrf');
+const { isHttpsRequest } = require('./utils/requestScheme');
+
+function buildHelmet(isHttps) {
+  const directives = {
+    defaultSrc: ["'self'"],
+    scriptSrc: [
+      "'self'",
+      "'unsafe-inline'",
+      'https://cdn.jsdelivr.net',
+      'https://cdn.datatables.net',
+      'https://code.jquery.com',
+    ],
+    scriptSrcAttr: ["'unsafe-inline'"],
+    styleSrc: [
+      "'self'",
+      "'unsafe-inline'",
+      'https://cdn.jsdelivr.net',
+      'https://cdn.datatables.net',
+      'https://fonts.googleapis.com',
+    ],
+    fontSrc: ["'self'", 'https://fonts.gstatic.com', 'https://cdn.jsdelivr.net', 'data:'],
+    imgSrc: ["'self'", 'data:', 'blob:'],
+    mediaSrc: ["'self'", 'blob:'],
+    connectSrc: ["'self'"],
+    frameAncestors: ["'none'"],
+    objectSrc: ["'none'"],
+    baseUri: ["'self'"],
+    formAction: ["'self'"],
+    // HTTPS only — on HTTP this breaks CSS/JS (blank login page)
+    upgradeInsecureRequests: isHttps ? [] : null,
+  };
+
+  return helmet({
+    contentSecurityPolicy: {
+      useDefaults: true,
+      directives,
+    },
+    // HSTS only meaningful on HTTPS
+    hsts: isHttps
+      ? { maxAge: 15552000, includeSubDomains: false, preload: false }
+      : false,
+    crossOriginEmbedderPolicy: false,
+    crossOriginOpenerPolicy: { policy: 'same-origin-allow-popups' },
+    originAgentCluster: false,
+    referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+  });
+}
+
+const helmetHttp = buildHelmet(false);
+const helmetHttps = buildHelmet(true);
 
 function createApp() {
   const app = express();
@@ -18,41 +68,13 @@ function createApp() {
 
   app.use('/public', express.static(path.join(__dirname, '../public')));
 
-  app.use(
-    helmet({
-      contentSecurityPolicy: {
-        useDefaults: true,
-        directives: {
-          defaultSrc: ["'self'"],
-          scriptSrc: [
-            "'self'",
-            "'unsafe-inline'",
-            'https://cdn.jsdelivr.net',
-            'https://cdn.datatables.net',
-            'https://code.jquery.com',
-          ],
-          scriptSrcAttr: ["'unsafe-inline'"],
-          styleSrc: [
-            "'self'",
-            "'unsafe-inline'",
-            'https://cdn.jsdelivr.net',
-            'https://cdn.datatables.net',
-            'https://fonts.googleapis.com',
-          ],
-          fontSrc: ["'self'", 'https://fonts.gstatic.com', 'https://cdn.jsdelivr.net', 'data:'],
-          imgSrc: ["'self'", 'data:', 'blob:'],
-          mediaSrc: ["'self'", 'blob:'],
-          connectSrc: ["'self'"],
-          frameAncestors: ["'none'"],
-          objectSrc: ["'none'"],
-          baseUri: ["'self'"],
-          formAction: ["'self'"],
-        },
-      },
-      crossOriginEmbedderPolicy: false,
-      referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
-    })
-  );
+  // Adaptive security headers: HTTP and HTTPS both work
+  app.use((req, res, next) => {
+    const https = isHttpsRequest(req);
+    res.locals.isHttps = https;
+    res.setHeader('X-Request-Scheme', https ? 'https' : 'http');
+    return (https ? helmetHttps : helmetHttp)(req, res, next);
+  });
 
   // API CORS: allowlist via CORS_ORIGIN, otherwise reflect request origin (Bearer API)
   const corsOptions = {
@@ -80,6 +102,19 @@ function createApp() {
     res.setHeader('X-Frame-Options', 'DENY');
     res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
     next();
+  });
+
+  // Simple health / scheme check (HTTP & HTTPS)
+  app.get('/health', (req, res) => {
+    const https = isHttpsRequest(req);
+    res.json({
+      status: 'ok',
+      scheme: https ? 'https' : 'http',
+      secure: Boolean(req.secure),
+      forwarded_proto: req.headers['x-forwarded-proto'] || null,
+      host: req.get('host') || null,
+      time: new Date().toISOString(),
+    });
   });
 
   app.get('/', (req, res) => res.redirect('/admin'));

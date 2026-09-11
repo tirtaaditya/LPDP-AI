@@ -57,10 +57,10 @@ function requireAdminSession(req, res, next) {
     req.admin = payload;
     // Sliding idle: refresh lastActivity on every authenticated request
     const refreshed = authService.touchAdminSession(payload);
-    setAdminCookie(res, refreshed);
+    setAdminCookie(req, res, refreshed);
     return next();
   } catch (err) {
-    clearAdminCookie(res);
+    clearAdminCookie(req, res);
     if (req.accepts('html') && !String(req.headers.accept || '').includes('application/json')) {
       const q =
         err.code === 'SESSION_IDLE'

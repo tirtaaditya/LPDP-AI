@@ -1,46 +1,46 @@
 const crypto = require('crypto');
 const config = require('../config');
+const { cookieSecureForRequest } = require('../utils/requestScheme');
 
 const CSRF_COOKIE = 'csrf_token';
 
-function cookieSecure() {
-  if (String(process.env.COOKIE_SECURE || '').toLowerCase() === 'true') return true;
-  if (String(process.env.COOKIE_SECURE || '').toLowerCase() === 'false') return false;
-  return config.nodeEnv === 'production';
+/** @deprecated use cookieSecureForRequest(req) — kept for callers without req */
+function cookieSecure(req) {
+  return cookieSecureForRequest(req);
 }
 
-function adminCookieOptions(maxAgeMs) {
+function adminCookieOptions(req, maxAgeMs) {
   return {
     httpOnly: true,
     sameSite: 'lax',
-    secure: cookieSecure(),
+    secure: cookieSecureForRequest(req),
     path: '/',
     maxAge: maxAgeMs,
   };
 }
 
-function clearAdminCookie(res) {
+function clearAdminCookie(req, res) {
   res.clearCookie('admin_session', {
     httpOnly: true,
     sameSite: 'lax',
-    secure: cookieSecure(),
+    secure: cookieSecureForRequest(req),
     path: '/',
   });
 }
 
-function setAdminCookie(res, token) {
-  res.cookie('admin_session', token, adminCookieOptions(config.adminSessionMaxMs));
+function setAdminCookie(req, res, token) {
+  res.cookie('admin_session', token, adminCookieOptions(req, config.adminSessionMaxMs));
 }
 
 function createCsrfToken() {
   return crypto.randomBytes(32).toString('hex');
 }
 
-function csrfCookieOptions() {
+function csrfCookieOptions(req) {
   return {
     httpOnly: false, // readable by JS for fetch header
     sameSite: 'strict',
-    secure: cookieSecure(),
+    secure: cookieSecureForRequest(req),
     path: '/',
     maxAge: config.adminSessionMaxMs,
   };
@@ -50,7 +50,7 @@ function ensureCsrfToken(req, res) {
   let token = req.cookies?.[CSRF_COOKIE];
   if (!token || String(token).length < 32) {
     token = createCsrfToken();
-    res.cookie(CSRF_COOKIE, token, csrfCookieOptions());
+    res.cookie(CSRF_COOKIE, token, csrfCookieOptions(req));
   }
   res.locals.csrfToken = token;
   return token;

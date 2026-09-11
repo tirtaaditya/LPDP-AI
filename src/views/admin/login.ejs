@@ -83,7 +83,7 @@
               <span>Captcha (angka)</span>
               <div class="ai-captcha">
                 <div class="ai-captcha-visual" id="captcha-visual">
-                  <%- captchaSvg %>
+                  <%- typeof captchaSvg !== 'undefined' && captchaSvg ? captchaSvg : '' %>
                 </div>
                 <div class="ai-captcha-actions">
                   <button type="button" class="ai-captcha-btn" id="captcha-audio" title="Putar suara">

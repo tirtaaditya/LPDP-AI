@@ -26,7 +26,7 @@ const loginLimiter = rateLimit({
         captchaCookieOptions,
       } = require('../utils/captcha');
       const captcha = createCaptcha();
-      res.cookie(CAPTCHA_COOKIE, captcha.token, captchaCookieOptions());
+      res.cookie(CAPTCHA_COOKIE, captcha.token, captchaCookieOptions(req));
       return res.status(429).render('admin/login', {
         error: message,
         csrfToken: res.locals.csrfToken || null,

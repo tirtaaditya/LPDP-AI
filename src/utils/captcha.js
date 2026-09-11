@@ -195,15 +195,12 @@ function verifyCaptcha(token, input) {
   return crypto.timingSafeEqual(a, b);
 }
 
-function captchaCookieOptions() {
-  const secure =
-    String(process.env.COOKIE_SECURE || '').toLowerCase() === 'true' ||
-    (String(process.env.COOKIE_SECURE || '').toLowerCase() !== 'false' &&
-      config.nodeEnv === 'production');
+function captchaCookieOptions(req) {
+  const { cookieSecureForRequest } = require('./requestScheme');
   return {
     httpOnly: true,
     sameSite: 'strict',
-    secure,
+    secure: cookieSecureForRequest(req),
     path: '/admin',
     maxAge: CAPTCHA_TTL_MS,
   };
