@@ -16,7 +16,8 @@
   <div id="chat-messages" class="chat-messages">
     <div class="chat-bubble assistant">
       Halo! Saya asisten AI LPDP. Ada yang ingin kamu tanyakan?
-      Untuk buat gambar: aktifkan mode Image, atau ketik /image deskripsi gambar.
+      Untuk buat gambar: mode Image atau /image deskripsi.
+      Untuk buat PDF: mode PDF atau /pdf isi dokumen.
     </div>
   </div>
 
@@ -25,6 +26,9 @@
   <form id="chat-form" class="chat-composer">
     <button type="button" id="btn-image-mode" class="chat-mode-btn" title="Toggle image generation" aria-pressed="false">
       <i class="bi bi-image"></i>
+    </button>
+    <button type="button" id="btn-pdf-mode" class="chat-mode-btn" title="Toggle PDF generation" aria-pressed="false">
+      <i class="bi bi-file-earmark-pdf"></i>
     </button>
     <label class="chat-attach btn btn-light-primary mb-0" title="Attach files">
       <i class="bi bi-paperclip"></i>
@@ -239,6 +243,47 @@
     font-weight: 700;
     color: #0e7490;
   }
+  .chat-doc-card {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 10px;
+    padding: 10px 12px;
+    border-radius: 12px;
+    border: 1px solid #fecaca;
+    background: #fff7f7;
+    max-width: min(420px, 100%);
+  }
+  .chat-doc-card i {
+    font-size: 1.4rem;
+    color: #dc2626;
+  }
+  .chat-doc-card .chat-doc-meta {
+    flex: 1;
+    min-width: 0;
+  }
+  .chat-doc-card .chat-doc-name {
+    font-weight: 700;
+    font-size: 0.85rem;
+    color: #0f172a;
+    word-break: break-all;
+  }
+  .chat-doc-card .chat-doc-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 4px;
+  }
+  .chat-doc-card .chat-doc-actions a {
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: #b91c1c;
+  }
+  .chat-mode-btn.is-pdf-active {
+    background: #fef2f2;
+    border-color: #fca5a5;
+    color: #b91c1c;
+    box-shadow: 0 0 0 3px rgba(248, 113, 113, 0.12);
+  }
   .chat-composer textarea {
     flex: 1;
     resize: none;
@@ -313,19 +358,44 @@
   const clearBtn = document.getElementById('btn-clear-chat');
   const jumpBtn = document.getElementById('chat-jump');
   const imageModeBtn = document.getElementById('btn-image-mode');
+  const pdfModeBtn = document.getElementById('btn-pdf-mode');
 
   let history = [];
   let pendingFiles = [];
   let imageMode = false;
+  let pdfMode = false;
+
+  function syncModeUi() {
+    if (imageModeBtn) {
+      imageModeBtn.classList.toggle('is-active', imageMode);
+      imageModeBtn.setAttribute('aria-pressed', imageMode ? 'true' : 'false');
+    }
+    if (pdfModeBtn) {
+      pdfModeBtn.classList.toggle('is-pdf-active', pdfMode);
+      pdfModeBtn.setAttribute('aria-pressed', pdfMode ? 'true' : 'false');
+    }
+    if (pdfMode) {
+      input.placeholder = 'Deskripsikan dokumen PDF yang ingin dibuat...';
+    } else if (imageMode) {
+      input.placeholder = 'Deskripsikan gambar yang ingin dibuat...';
+    } else {
+      input.placeholder = 'Tulis pesan... (Enter kirim, Shift+Enter baris baru)';
+    }
+  }
 
   if (imageModeBtn) {
     imageModeBtn.addEventListener('click', function () {
       imageMode = !imageMode;
-      imageModeBtn.classList.toggle('is-active', imageMode);
-      imageModeBtn.setAttribute('aria-pressed', imageMode ? 'true' : 'false');
-      input.placeholder = imageMode
-        ? 'Deskripsikan gambar yang ingin dibuat...'
-        : 'Tulis pesan... (Enter kirim, Shift+Enter baris baru)';
+      if (imageMode) pdfMode = false;
+      syncModeUi();
+    });
+  }
+
+  if (pdfModeBtn) {
+    pdfModeBtn.addEventListener('click', function () {
+      pdfMode = !pdfMode;
+      if (pdfMode) imageMode = false;
+      syncModeUi();
     });
   }
 
@@ -390,7 +460,7 @@
     return t.length > 900 || t.split('\n').length > 16;
   }
 
-  function appendBubble(role, text, meta, images) {
+  function appendBubble(role, text, meta, images, documents) {
     const div = document.createElement('div');
     div.className = 'chat-bubble ' + role;
     const body = document.createElement('div');
@@ -441,6 +511,33 @@
       });
     }
 
+    if (Array.isArray(documents) && documents.length) {
+      documents.forEach(function (doc) {
+        if (!doc || !doc.url) return;
+        const card = document.createElement('div');
+        card.className = 'chat-doc-card';
+        card.innerHTML =
+          '<i class="bi bi-file-earmark-pdf-fill" aria-hidden="true"></i>' +
+          '<div class="chat-doc-meta">' +
+          '<div class="chat-doc-name">' + escapeHtml(doc.fileName || 'document.pdf') + '</div>' +
+          '<div class="chat-doc-actions"></div>' +
+          '</div>';
+        const actions = card.querySelector('.chat-doc-actions');
+        const open = document.createElement('a');
+        open.href = doc.url;
+        open.target = '_blank';
+        open.rel = 'noopener';
+        open.textContent = 'Open';
+        const download = document.createElement('a');
+        download.href = doc.url;
+        download.download = doc.fileName || 'document.pdf';
+        download.textContent = 'Download PDF';
+        actions.appendChild(open);
+        actions.appendChild(download);
+        div.appendChild(card);
+      });
+    }
+
     if (meta) {
       const m = document.createElement('span');
       m.className = 'chat-meta';
@@ -484,6 +581,7 @@
     fd.append('message', text);
     fd.append('history', JSON.stringify(history));
     fd.append('generate_image', imageMode ? 'true' : 'false');
+    fd.append('generate_pdf', pdfMode ? 'true' : 'false');
     pendingFiles.forEach(function (f) { fd.append('files', f); });
 
     const csrfMeta = document.querySelector('meta[name="csrf-token"]');
@@ -500,9 +598,11 @@
     const typing = document.createElement('div');
     typing.className = 'chat-typing ai-think';
     typing.id = 'chat-typing';
-    typing.innerHTML = imageMode
-      ? '<span>Generating image</span><span class="dots"><span></span><span></span><span></span></span>'
-      : '<span>Model inferencing</span><span class="dots"><span></span><span></span><span></span></span>';
+    typing.innerHTML = pdfMode
+      ? '<span>Generating PDF</span><span class="dots"><span></span><span></span><span></span></span>'
+      : imageMode
+        ? '<span>Generating image</span><span class="dots"><span></span><span></span><span></span></span>'
+        : '<span>Model inferencing</span><span class="dots"><span></span><span></span><span></span></span>';
     messagesEl.appendChild(typing);
     scrollToBottom(true);
 
@@ -524,19 +624,24 @@
 
       const reply = json.data.reply || '';
       const images = json.data.images || [];
+      const documents = json.data.documents || [];
       const meta = json.data.meta || {};
       const metaLabel = [
+        meta.mode === 'pdf_generation' ? 'pdf' : null,
         meta.mode === 'image_generation' ? 'image' : null,
         meta.provider || '',
         meta.model || ''
       ].filter(Boolean).join(' · ');
 
-      appendBubble('assistant', reply, metaLabel, images);
+      appendBubble('assistant', reply, metaLabel, images, documents);
 
       history.push({ role: 'user', content: userLabel });
       history.push({
         role: 'assistant',
-        content: reply + (images.length ? ' [generated image]' : '')
+        content:
+          reply +
+          (images.length ? ' [generated image]' : '') +
+          (documents.length ? ' [generated pdf]' : '')
       });
       if (history.length > 40) history = history.slice(-40);
     } catch (err) {

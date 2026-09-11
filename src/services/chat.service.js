@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const OpenAI = require('openai');
+const PDFDocument = require('pdfkit');
 const db = require('../db');
 const config = require('../config');
 const fileService = require('./file.service');
@@ -12,11 +13,29 @@ function pickVisionModel(configuredModel) {
   return model;
 }
 
+function wantsPdfGeneration(message, force = false) {
+  if (force) return true;
+  const text = String(message || '').trim();
+  if (!text) return false;
+  if (/^\/(pdf|dokumen|document)\b/i.test(text)) return true;
+
+  const lower = text.toLowerCase();
+  const patterns = [
+    /\b(buatkan|buatkanlah|generate|create|bikin|buat)\b.*\b(pdf|dokumen pdf|file pdf)\b/i,
+    /\b(pdf|dokumen pdf|file pdf)\b.*\b(buat|buatkan|generate|create|bikin)\b/i,
+    /\bexport\s+(to\s+)?pdf\b/i,
+    /\b(jadiin|jadikan)\s+(jadi\s+)?pdf\b/i,
+  ];
+  return patterns.some((re) => re.test(lower));
+}
+
 function wantsImageGeneration(message, force = false) {
   if (force) return true;
   const text = String(message || '').trim();
   if (!text) return false;
   if (/^\/(image|gambar|img)\b/i.test(text)) return true;
+  // Prefer PDF when both could match ("buat pdf" vs image)
+  if (wantsPdfGeneration(text, false)) return false;
 
   const lower = text.toLowerCase();
   const patterns = [
@@ -34,6 +53,199 @@ function cleanImagePrompt(message) {
   return String(message || '')
     .replace(/^\/(image|gambar|img)\s*/i, '')
     .trim();
+}
+
+function cleanPdfPrompt(message) {
+  return String(message || '')
+    .replace(/^\/(pdf|dokumen|document)\s*/i, '')
+    .replace(
+      /\b(buatkan|buatkanlah|tolong|please)\s+(sebuah\s+|satu\s+)?(pdf|dokumen pdf|file pdf)\s*(dari|tentang|isi|:)?\s*/i,
+      ''
+    )
+    .trim();
+}
+
+function resolvePdfFont() {
+  const candidates = [
+    path.join(config.projectRoot, 'public', 'fonts', 'NotoSans-Regular.ttf'),
+    'C:\\Windows\\Fonts\\arial.ttf',
+    'C:\\Windows\\Fonts\\calibri.ttf',
+    '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
+    '/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf',
+  ];
+  for (const p of candidates) {
+    if (fs.existsSync(p)) return p;
+  }
+  return null;
+}
+
+function parsePdfDocumentJson(raw) {
+  const text = String(raw || '').trim();
+  const fence = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  const candidate = fence ? fence[1].trim() : text;
+  try {
+    const parsed = JSON.parse(candidate);
+    if (parsed && (parsed.title || parsed.body)) {
+      return {
+        title: String(parsed.title || 'Dokumen AI LPDP').trim(),
+        body: String(parsed.body || '').trim(),
+      };
+    }
+  } catch {
+    // fall through
+  }
+  const titleMatch = text.match(/^TITLE:\s*(.+)$/im);
+  const title = titleMatch ? titleMatch[1].trim() : 'Dokumen AI LPDP';
+  const body = titleMatch
+    ? text.replace(/^TITLE:\s*.+$/im, '').trim()
+    : text;
+  return { title, body: body || text };
+}
+
+async function saveGeneratedPdfBuffer(buffer) {
+  const dir = path.join(config.projectRoot, 'public', 'generated');
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  const fileName = `doc_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.pdf`;
+  const fullPath = path.join(dir, fileName);
+  fs.writeFileSync(fullPath, buffer);
+  return {
+    fileName,
+    url: `/public/generated/${fileName}`,
+    mime: 'application/pdf',
+  };
+}
+
+function buildPdfBuffer({ title, body }) {
+  return new Promise((resolve, reject) => {
+    const doc = new PDFDocument({
+      size: 'A4',
+      margins: { top: 56, bottom: 56, left: 56, right: 56 },
+      info: {
+        Title: title,
+        Author: 'AI LPDP Admin Chat',
+        Creator: 'AI LPDP',
+      },
+    });
+    const chunks = [];
+    doc.on('data', (c) => chunks.push(c));
+    doc.on('end', () => resolve(Buffer.concat(chunks)));
+    doc.on('error', reject);
+
+    const fontPath = resolvePdfFont();
+    if (fontPath) {
+      doc.font(fontPath);
+    } else {
+      doc.font('Helvetica');
+    }
+
+    const safeTitle = String(title || 'Dokumen AI LPDP').slice(0, 200);
+    const safeBody = String(body || '').slice(0, 80000);
+
+    doc.fillColor('#0e7490').fontSize(11).text('AI LPDP · Generated Document', {
+      align: 'left',
+    });
+    doc.moveDown(0.3);
+    doc
+      .strokeColor('#a5f3fc')
+      .lineWidth(1)
+      .moveTo(doc.page.margins.left, doc.y)
+      .lineTo(doc.page.width - doc.page.margins.right, doc.y)
+      .stroke();
+    doc.moveDown(1);
+
+    doc.fillColor('#0f172a').fontSize(18).text(safeTitle, { align: 'left' });
+    doc.moveDown(0.4);
+    doc
+      .fillColor('#64748b')
+      .fontSize(9)
+      .text(
+        `Dibuat: ${new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' })}`,
+        { align: 'left' }
+      );
+    doc.moveDown(1);
+    doc.fillColor('#1e293b').fontSize(11).text(safeBody || '(kosong)', {
+      align: 'left',
+      lineGap: 3,
+    });
+
+    doc.end();
+  });
+}
+
+async function generatePdf({ prompt, history = [], fileText = '' }) {
+  const runtime = await getAiRuntime();
+  const { provider, client, model } = runtime;
+  const topic = cleanPdfPrompt(prompt) || String(prompt || '').trim();
+  if (!topic && !fileText) {
+    const err = new Error(
+      'PDF prompt is too short. Describe the document, or use /pdf <isi dokumen>.'
+    );
+    err.code = 'PDF_PROMPT_SHORT';
+    throw err;
+  }
+
+  const temperature = Number(await db.getSetting('temperature', '0.2'));
+  const maxTokens = Math.min(
+    4000,
+    Math.max(800, Number(await db.getSetting('max_tokens', '2000')) || 2000)
+  );
+
+  const systemPrompt =
+    'You are a document writer for LPDP admin. Write clear Indonesian documents. ' +
+    'Return ONLY valid JSON (no markdown fences) with keys: "title" (short) and "body" (full document text, paragraphs separated by blank lines). ' +
+    'Do not invent confidential personal data. If context files are attached, use them.';
+
+  const messages = [{ role: 'system', content: systemPrompt }];
+  for (const turn of history.slice(-8)) {
+    if (!turn || !turn.role || !turn.content) continue;
+    if (turn.role !== 'user' && turn.role !== 'assistant') continue;
+    messages.push({
+      role: turn.role,
+      content: String(turn.content).slice(0, 8000),
+    });
+  }
+  messages.push({
+    role: 'user',
+    content: [
+      `Buatkan dokumen PDF dengan topik/instruksi berikut:\n${topic || '(lihat lampiran)'}`,
+      fileText
+        ? `\n\n--- KONTEKS FILE ---\n${String(fileText).slice(0, 30000)}`
+        : '',
+    ]
+      .join('')
+      .trim(),
+  });
+
+  const completion = await client.chat.completions.create({
+    model,
+    temperature,
+    max_tokens: maxTokens,
+    messages,
+  });
+
+  const raw = completion.choices?.[0]?.message?.content || '';
+  const { title, body } = parsePdfDocumentJson(raw);
+  if (!body) {
+    const err = new Error('AI did not return document body for PDF.');
+    err.code = 'PDF_EMPTY_BODY';
+    throw err;
+  }
+
+  const pdfBuffer = await buildPdfBuffer({ title, body });
+  const saved = await saveGeneratedPdfBuffer(pdfBuffer);
+
+  return {
+    reply: `PDF berhasil dibuat.\n\nJudul: ${title}\n\nUnduh file di bawah, atau buka di tab baru.`,
+    images: [],
+    documents: [saved],
+    meta: {
+      provider,
+      model,
+      usage: completion.usage || null,
+      mode: 'pdf_generation',
+      title,
+    },
+  };
 }
 
 /**
@@ -260,6 +472,7 @@ async function generateImage({ prompt, size }) {
       ? `Gambar berhasil dibuat (model: ${usedModel}).\n\nPrompt (revised):\n${item.revised_prompt}`
       : `Gambar berhasil dibuat (model: ${usedModel}).`,
     images: [saved],
+    documents: [],
     meta: {
       provider: 'openai',
       model: usedModel,
@@ -277,8 +490,17 @@ async function chat({
   fileText = '',
   visionFiles = [],
   forceImage = false,
+  forcePdf = false,
 }) {
   const textMessage = String(message || '').trim();
+
+  if (wantsPdfGeneration(textMessage, forcePdf)) {
+    return generatePdf({
+      prompt: textMessage,
+      history,
+      fileText,
+    });
+  }
 
   if (wantsImageGeneration(textMessage, forceImage)) {
     return generateImage({ prompt: textMessage });
@@ -305,7 +527,7 @@ async function chat({
   const maxTokens = Number(await db.getSetting('max_tokens', '2000'));
   const systemPrompt =
     (await db.getSetting('chat_system_prompt', '')) ||
-    'You are a helpful AI assistant for LPDP admin. Answer clearly in the user language (Indonesian or English). If documents are attached, use them as context. If the user asks you to create/generate/draw an image, tell them to use /image <prompt> or enable Image mode.';
+    'You are a helpful AI assistant for LPDP admin. Answer clearly in the user language (Indonesian or English). If documents are attached, use them as context. If the user asks you to create/generate/draw an image, tell them to use /image <prompt> or enable Image mode. If they ask to create a PDF document, tell them to use /pdf <isi> or enable PDF mode.';
 
   const messages = [{ role: 'system', content: systemPrompt }];
 
@@ -369,6 +591,7 @@ async function chat({
   return {
     reply,
     images: [],
+    documents: [],
     meta: {
       provider,
       model,
@@ -435,5 +658,7 @@ module.exports = {
   chat,
   processChatUploads,
   wantsImageGeneration,
+  wantsPdfGeneration,
   generateImage,
+  generatePdf,
 };

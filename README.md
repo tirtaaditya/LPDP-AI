@@ -82,7 +82,11 @@ Response contract:
 
 ## Docs
 
+- **Manual Book:** [`docs/MANUAL_BOOK.md`](./docs/MANUAL_BOOK.md) (gambar UI: [`docs/images/`](./docs/images/))
+- **SIT:** [`docs/SIT.md`](./docs/SIT.md)
+- **UAT:** [`docs/UAT.md`](./docs/UAT.md)
 - API docs: [`docs/API.md`](./docs/API.md)
+- Staff Assistant flow (SA/PM): [`docs/LPDP_STAFF_ASSISTANT_FLOW.md`](./docs/LPDP_STAFF_ASSISTANT_FLOW.md)
 - Postman collection **AI LPDP**: [`docs/AI_LPDP.postman_collection.json`](./docs/AI_LPDP.postman_collection.json)
 - Postman environment (local): [`docs/AI_LPDP.postman_environment.json`](./docs/AI_LPDP.postman_environment.json)
 - Postman environment (prod): [`docs/AI_LPDP.postman_environment.production.json`](./docs/AI_LPDP.postman_environment.production.json)

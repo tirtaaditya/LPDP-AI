@@ -770,6 +770,9 @@ async function chatMessage(req, res) {
   const forceImage =
     String(req.body?.generate_image || '').toLowerCase() === 'true' ||
     String(req.body?.generate_image || '') === '1';
+  const forcePdf =
+    String(req.body?.generate_pdf || '').toLowerCase() === 'true' ||
+    String(req.body?.generate_pdf || '') === '1';
 
   async function saveChatLog(payload) {
     try {
@@ -817,27 +820,34 @@ async function chatMessage(req, res) {
       history: history.slice(-20),
       fileText: processed.fileText,
       visionFiles: processed.visionFiles,
-      forceImage,
+      forceImage: forceImage && !forcePdf,
+      forcePdf,
     });
 
     const usage = result.meta?.usage || {};
     const images = result.images || [];
-    const mode = result.meta?.mode || (forceImage ? 'image_generation' : 'chat');
+    const documents = result.documents || [];
+    const mode =
+      result.meta?.mode ||
+      (forcePdf ? 'pdf_generation' : forceImage ? 'image_generation' : 'chat');
     const aiResponse = JSON.stringify({
       reply: result.reply,
       images,
+      documents,
       meta: result.meta || null,
     });
 
     await saveChatLog({
       prompt: message || '(file only)',
       schemaHint: `admin_chat:${mode}`,
-      hasFile: processed.filesMeta.length > 0 || images.length > 0,
+      hasFile:
+        processed.filesMeta.length > 0 || images.length > 0 || documents.length > 0,
       fileName:
-        processed.filesMeta.length || images.length
+        processed.filesMeta.length || images.length || documents.length
           ? JSON.stringify({
               uploads: processed.filesMeta,
               generated: images,
+              documents,
             })
           : null,
       fileSize: processed.filesMeta.reduce((sum, f) => sum + (Number(f.size) || 0), 0) || null,
@@ -858,6 +868,7 @@ async function chatMessage(req, res) {
       data: {
         reply: result.reply,
         images,
+        documents,
         files: processed.filesMeta,
         meta: result.meta,
       },
@@ -880,7 +891,11 @@ async function chatMessage(req, res) {
 
     await saveChatLog({
       prompt: message || '(file only)',
-      schemaHint: forceImage ? 'admin_chat:image_generation' : 'admin_chat:chat',
+      schemaHint: forcePdf
+        ? 'admin_chat:pdf_generation'
+        : forceImage
+          ? 'admin_chat:image_generation'
+          : 'admin_chat:chat',
       hasFile: uploads.length > 0,
       fileName: uploads.length
         ? JSON.stringify({
