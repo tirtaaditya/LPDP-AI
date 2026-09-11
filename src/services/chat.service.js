@@ -85,10 +85,23 @@ function parsePdfDocumentJson(raw) {
   const candidate = fence ? fence[1].trim() : text;
   try {
     const parsed = JSON.parse(candidate);
-    if (parsed && (parsed.title || parsed.body)) {
+    if (parsed && (parsed.title || parsed.body || parsed.sections)) {
+      const sections = Array.isArray(parsed.sections)
+        ? parsed.sections
+            .map((s) => ({
+              heading: String(s?.heading || s?.title || '').trim(),
+              body: String(s?.body || s?.text || '').trim(),
+              image:
+                s?.image === null || s?.image === undefined || s?.image === ''
+                  ? null
+                  : Number(s.image),
+            }))
+            .filter((s) => s.heading || s.body || Number.isFinite(s.image))
+        : [];
       return {
         title: String(parsed.title || 'Dokumen AI LPDP').trim(),
         body: String(parsed.body || '').trim(),
+        sections,
       };
     }
   } catch {
@@ -99,7 +112,7 @@ function parsePdfDocumentJson(raw) {
   const body = titleMatch
     ? text.replace(/^TITLE:\s*.+$/im, '').trim()
     : text;
-  return { title, body: body || text };
+  return { title, body: body || text, sections: [] };
 }
 
 async function saveGeneratedPdfBuffer(buffer) {
@@ -115,7 +128,47 @@ async function saveGeneratedPdfBuffer(buffer) {
   };
 }
 
-function buildPdfBuffer({ title, body }) {
+function pdfContentWidth(doc) {
+  return doc.page.width - doc.page.margins.left - doc.page.margins.right;
+}
+
+function pdfEnsureSpace(doc, needed = 120) {
+  const bottom = doc.page.height - doc.page.margins.bottom;
+  if (doc.y + needed > bottom) {
+    doc.addPage();
+  }
+}
+
+function pdfDrawImage(doc, img, caption) {
+  if (!img?.buffer || !Buffer.isBuffer(img.buffer)) return;
+  pdfEnsureSpace(doc, 160);
+  const maxW = pdfContentWidth(doc);
+  const maxH = Math.min(420, doc.page.height - doc.page.margins.top - doc.page.margins.bottom - 80);
+  try {
+    if (caption) {
+      doc
+        .fillColor('#0e7490')
+        .fontSize(9)
+        .text(String(caption).slice(0, 180), { align: 'left' });
+      doc.moveDown(0.3);
+    }
+    doc.image(img.buffer, {
+      fit: [maxW, maxH],
+      align: 'center',
+    });
+    doc.moveDown(0.8);
+  } catch (err) {
+    doc
+      .fillColor('#be123c')
+      .fontSize(9)
+      .text(
+        `[Gambar gagal disisipkan: ${img.fileName || 'file'} — ${err.message || 'error'}]`
+      );
+    doc.moveDown(0.5);
+  }
+}
+
+function buildPdfBuffer({ title, body, sections = [], images = [] }) {
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({
       size: 'A4',
@@ -125,6 +178,7 @@ function buildPdfBuffer({ title, body }) {
         Author: 'AI LPDP Admin Chat',
         Creator: 'AI LPDP',
       },
+      autoFirstPage: true,
     });
     const chunks = [];
     doc.on('data', (c) => chunks.push(c));
@@ -139,7 +193,8 @@ function buildPdfBuffer({ title, body }) {
     }
 
     const safeTitle = String(title || 'Dokumen AI LPDP').slice(0, 200);
-    const safeBody = String(body || '').slice(0, 80000);
+    const imageList = Array.isArray(images) ? images.filter((i) => i && i.buffer) : [];
+    const usedImage = new Set();
 
     doc.fillColor('#0e7490').fontSize(11).text('AI LPDP · Generated Document', {
       align: 'left',
@@ -159,26 +214,102 @@ function buildPdfBuffer({ title, body }) {
       .fillColor('#64748b')
       .fontSize(9)
       .text(
-        `Dibuat: ${new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' })}`,
+        `Dibuat: ${new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' })}` +
+          (imageList.length ? ` · ${imageList.length} gambar` : ''),
         { align: 'left' }
       );
     doc.moveDown(1);
-    doc.fillColor('#1e293b').fontSize(11).text(safeBody || '(kosong)', {
-      align: 'left',
-      lineGap: 3,
-    });
+
+    if (Array.isArray(sections) && sections.length) {
+      for (const section of sections) {
+        pdfEnsureSpace(doc, 80);
+        if (section.heading) {
+          doc
+            .fillColor('#0f172a')
+            .fontSize(13)
+            .text(String(section.heading).slice(0, 200), { align: 'left' });
+          doc.moveDown(0.35);
+        }
+        if (section.body) {
+          doc
+            .fillColor('#1e293b')
+            .fontSize(11)
+            .text(String(section.body).slice(0, 20000), {
+              align: 'left',
+              lineGap: 3,
+            });
+          doc.moveDown(0.5);
+        }
+        if (Number.isFinite(section.image) && imageList[section.image]) {
+          usedImage.add(section.image);
+          pdfDrawImage(
+            doc,
+            imageList[section.image],
+            `Gambar ${section.image + 1}: ${imageList[section.image].fileName || ''}`
+          );
+        }
+      }
+    } else {
+      const safeBody = String(body || '').slice(0, 80000);
+      doc.fillColor('#1e293b').fontSize(11).text(safeBody || '(kosong)', {
+        align: 'left',
+        lineGap: 3,
+      });
+      doc.moveDown(1);
+    }
+
+    const remaining = imageList
+      .map((img, idx) => ({ img, idx }))
+      .filter(({ idx }) => !usedImage.has(idx));
+
+    if (remaining.length) {
+      pdfEnsureSpace(doc, 60);
+      doc
+        .fillColor('#0f172a')
+        .fontSize(13)
+        .text(
+          Array.isArray(sections) && sections.length
+            ? 'Lampiran gambar lainnya'
+            : 'Lampiran screenshot',
+          { align: 'left' }
+        );
+      doc.moveDown(0.6);
+      for (const { img, idx } of remaining) {
+        pdfDrawImage(doc, img, `Gambar ${idx + 1}: ${img.fileName || ''}`);
+      }
+    }
 
     doc.end();
   });
 }
 
-async function generatePdf({ prompt, history = [], fileText = '' }) {
+async function generatePdf({
+  prompt,
+  history = [],
+  fileText = '',
+  imageFiles = [],
+  visionFiles = [],
+}) {
   const runtime = await getAiRuntime();
-  const { provider, client, model } = runtime;
+  const { provider, client } = runtime;
+  let model = runtime.model;
   const topic = cleanPdfPrompt(prompt) || String(prompt || '').trim();
-  if (!topic && !fileText) {
+  const images = (Array.isArray(imageFiles) && imageFiles.length
+    ? imageFiles
+    : (visionFiles || []).filter(
+        (f) =>
+          f &&
+          (f.kind === 'image' ||
+            String(f.mime || '').startsWith('image/') ||
+            fileService.isImageExt(
+              path.extname(f.fileName || '').replace('.', '').toLowerCase()
+            ))
+      )
+  ).filter((f) => f && f.buffer);
+
+  if (!topic && !fileText && !images.length) {
     const err = new Error(
-      'PDF prompt is too short. Describe the document, or use /pdf <isi dokumen>.'
+      'PDF prompt is too short. Describe the document, attach screenshots, or use /pdf <isi dokumen>.'
     );
     err.code = 'PDF_PROMPT_SHORT';
     throw err;
@@ -190,10 +321,17 @@ async function generatePdf({ prompt, history = [], fileText = '' }) {
     Math.max(800, Number(await db.getSetting('max_tokens', '2000')) || 2000)
   );
 
+  const imageCatalog = images
+    .map((img, i) => `[${i}] ${img.fileName || `image_${i + 1}`}`)
+    .join('\n');
+
   const systemPrompt =
-    'You are a document writer for LPDP admin. Write clear Indonesian documents. ' +
-    'Return ONLY valid JSON (no markdown fences) with keys: "title" (short) and "body" (full document text, paragraphs separated by blank lines). ' +
-    'Do not invent confidential personal data. If context files are attached, use them.';
+    'You are a technical writer for LPDP AI Admin Manual Book. Write clear Indonesian documentation. ' +
+    'Return ONLY valid JSON (no markdown fences) with this shape:\n' +
+    '{"title":"string","sections":[{"heading":"string","body":"string","image":0}]}\n' +
+    'Rules: "image" is the 0-based index of an attached screenshot (or null if no image for that section). ' +
+    'Use attached screenshots in order when writing a manual. Cover each screen/module. ' +
+    'Do not invent confidential personal data. Keep body practical (langkah + penjelasan singkat).';
 
   const messages = [{ role: 'system', content: systemPrompt }];
   for (const turn of history.slice(-8)) {
@@ -204,38 +342,91 @@ async function generatePdf({ prompt, history = [], fileText = '' }) {
       content: String(turn.content).slice(0, 8000),
     });
   }
-  messages.push({
-    role: 'user',
-    content: [
-      `Buatkan dokumen PDF dengan topik/instruksi berikut:\n${topic || '(lihat lampiran)'}`,
-      fileText
-        ? `\n\n--- KONTEKS FILE ---\n${String(fileText).slice(0, 30000)}`
-        : '',
-    ]
-      .join('')
-      .trim(),
-  });
 
-  const completion = await client.chat.completions.create({
-    model,
-    temperature,
-    max_tokens: maxTokens,
-    messages,
-  });
+  const textBrief = [
+    `Buatkan dokumen PDF (manual book) dengan instruksi:\n${topic || '(lihat screenshot/lampiran)'}`,
+    images.length
+      ? `\n\nAttached screenshots (gunakan index di field "image"):\n${imageCatalog}`
+      : '',
+    fileText
+      ? `\n\n--- KONTEKS FILE ---\n${String(fileText).slice(0, 20000)}`
+      : '',
+  ]
+    .join('')
+    .trim();
+
+  const useVision = provider === 'openai' && images.length > 0;
+  if (useVision) {
+    model = pickVisionModel(model);
+  }
+
+  let userContent;
+  if (useVision) {
+    userContent = [
+      { type: 'text', text: textBrief },
+      ...images.slice(0, 15).map((f) => fileService.toVisionContentPart(f)),
+    ];
+  } else {
+    userContent = textBrief;
+  }
+
+  messages.push({ role: 'user', content: userContent });
+
+  let completion;
+  try {
+    completion = await client.chat.completions.create({
+      model,
+      temperature,
+      max_tokens: maxTokens,
+      messages,
+    });
+  } catch (err) {
+    if (useVision) {
+      // Retry text-only if vision payload too large; images still embedded in PDF.
+      completion = await client.chat.completions.create({
+        model: runtime.model,
+        temperature,
+        max_tokens: maxTokens,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          ...messages.slice(1, -1),
+          {
+            role: 'user',
+            content:
+              textBrief +
+              '\n\n(Catatan: screenshot dilampirkan ke PDF secara otomatis; tulis sections dengan image index.)',
+          },
+        ],
+      });
+    } else {
+      throw err;
+    }
+  }
 
   const raw = completion.choices?.[0]?.message?.content || '';
-  const { title, body } = parsePdfDocumentJson(raw);
-  if (!body) {
+  const parsed = parsePdfDocumentJson(raw);
+  const { title, body, sections } = parsed;
+  if (!body && !(sections && sections.length)) {
     const err = new Error('AI did not return document body for PDF.');
     err.code = 'PDF_EMPTY_BODY';
     throw err;
   }
 
-  const pdfBuffer = await buildPdfBuffer({ title, body });
+  const pdfBuffer = await buildPdfBuffer({
+    title,
+    body,
+    sections,
+    images,
+  });
   const saved = await saveGeneratedPdfBuffer(pdfBuffer);
 
   return {
-    reply: `PDF berhasil dibuat.\n\nJudul: ${title}\n\nUnduh file di bawah, atau buka di tab baru.`,
+    reply:
+      `PDF berhasil dibuat.\n\nJudul: ${title}\n` +
+      (images.length
+        ? `Gambar tersisip: ${images.length} file.\n\n`
+        : '\n') +
+      'Unduh file di bawah, atau buka di tab baru.',
     images: [],
     documents: [saved],
     meta: {
@@ -244,16 +435,18 @@ async function generatePdf({ prompt, history = [], fileText = '' }) {
       usage: completion.usage || null,
       mode: 'pdf_generation',
       title,
+      embedded_images: images.map((i) => i.fileName),
     },
   };
 }
 
 /**
- * Process multer files into text + optional vision PDF buffers.
+ * Process multer files into text + optional vision PDF buffers + embeddable images.
  */
 async function processChatUploads(files = []) {
   const textParts = [];
   const visionFiles = [];
+  const imageFiles = [];
   const meta = [];
 
   for (const file of files) {
@@ -271,6 +464,16 @@ async function processChatUploads(files = []) {
         ext,
         scanned: Boolean(extracted.needsVision),
       });
+
+      if (fileService.isImageExt(ext)) {
+        imageFiles.push({
+          fileName: file.originalname || 'image',
+          mime: extracted.mime || fileService.mimeFromExt(ext),
+          buffer: extracted.buffer || buffer,
+          kind: 'image',
+        });
+      }
+
       if (extracted.needsVision) {
         visionFiles.push({
           fileName: file.originalname || 'file',
@@ -295,6 +498,7 @@ async function processChatUploads(files = []) {
   return {
     fileText: textParts.join('\n\n'),
     visionFiles,
+    imageFiles,
     filesMeta: meta,
   };
 }
@@ -489,6 +693,7 @@ async function chat({
   history = [],
   fileText = '',
   visionFiles = [],
+  imageFiles = [],
   forceImage = false,
   forcePdf = false,
 }) {
@@ -499,6 +704,8 @@ async function chat({
       prompt: textMessage,
       history,
       fileText,
+      imageFiles,
+      visionFiles,
     });
   }
 

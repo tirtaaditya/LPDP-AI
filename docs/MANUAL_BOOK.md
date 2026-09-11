@@ -123,6 +123,8 @@ Menampilkan ringkasan:
 3. Opsional: lampirkan PDF/DOCX/gambar.
 4. Untuk gambar: aktifkan Image mode atau ketik `/image deskripsi`.
 5. Untuk PDF: aktifkan PDF mode (ikon PDF) atau ketik `/pdf isi dokumen` / “buatkan PDF …”.
+   - Screenshot/gambar yang dilampirkan **ikut disisipkan** ke PDF (bukan teks saja).
+   - Disarankan provider **OpenAI** agar AI bisa “membaca” screenshot saat menulis manual.
 
 Aktivitas chat tercatat di **AI Logs** (`auth_type` admin chat).
 

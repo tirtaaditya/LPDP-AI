@@ -820,6 +820,7 @@ async function chatMessage(req, res) {
       history: history.slice(-20),
       fileText: processed.fileText,
       visionFiles: processed.visionFiles,
+      imageFiles: processed.imageFiles || [],
       forceImage: forceImage && !forcePdf,
       forcePdf,
     });
