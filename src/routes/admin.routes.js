@@ -91,6 +91,7 @@ router.post('/tokens/:id/revoke', requireAdminSession, adminController.tokensRev
 router.post('/tokens/:id/delete', requireAdminSession, adminController.tokensDelete);
 
 router.get('/settings', requireAdminSession, adminController.settingsPage);
+router.get('/settings/openai-models', requireAdminSession, adminController.settingsOpenAiModels);
 router.post('/settings', requireAdminSession, adminController.settingsUpdate);
 router.post('/settings/kurs-sync', requireAdminSession, adminController.settingsKursSync);
 

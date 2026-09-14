@@ -41,7 +41,22 @@
       </div>
       <div class="col-md-6">
         <label class="form-label">OpenAI Model</label>
-        <input class="form-control" name="openai_model" value="<%= settings.openai_model || '' %>" placeholder="gpt-4o-mini" />
+        <% const openAiModel = settings.openai_model || 'gpt-4o-mini'; %>
+        <% const openAiModels = ['gpt-4o-mini', 'gpt-4o', 'gpt-4.1-mini', 'gpt-4.1', 'gpt-5-mini', 'gpt-5']; %>
+        <div class="input-group">
+          <select class="form-select" name="openai_model" id="openai_model">
+            <% if (!openAiModels.includes(openAiModel)) { %>
+              <option value="<%= openAiModel %>" selected>Custom: <%= openAiModel %></option>
+            <% } %>
+            <% openAiModels.forEach((model) => { %>
+              <option value="<%= model %>" <%= openAiModel === model ? 'selected' : '' %>><%= model %></option>
+            <% }); %>
+          </select>
+          <button class="btn btn-outline-secondary" type="button" id="refresh-openai-models" title="Tarik ulang daftar model OpenAI" aria-label="Tarik ulang daftar model OpenAI">
+            <i class="bi bi-arrow-clockwise"></i>
+          </button>
+        </div>
+        <div class="form-text" id="openai-model-status">Daftar model akan ditarik otomatis dari API key OpenAI saat halaman dibuka. Default: <code>gpt-4o-mini</code>. PDF/gambar yang memakai Vision otomatis menggunakan <code>gpt-4o</code> bila model utama berakhiran <code>mini</code> atau <code>nano</code>.</div>
       </div>
       <div class="col-md-4">
         <label class="form-label">Image model</label>
@@ -233,5 +248,55 @@
     </form>
   </div>
 </div>
+
+<script>
+  (function () {
+    var select = document.getElementById('openai_model');
+    var refreshButton = document.getElementById('refresh-openai-models');
+    var status = document.getElementById('openai-model-status');
+    if (!select || !refreshButton || !status) return;
+
+    function loadModels() {
+      var selectedModel = select.value;
+      refreshButton.disabled = true;
+      status.textContent = 'Mengambil daftar model dari OpenAI...';
+
+      fetch('/admin/settings/openai-models', { credentials: 'same-origin' })
+        .then(function (response) { return response.json(); })
+        .then(function (payload) {
+          if (!payload || payload.status !== 'success' || !Array.isArray(payload.data?.models)) {
+            throw new Error(payload?.message || 'Daftar model tidak tersedia.');
+          }
+
+          var models = payload.data.models;
+          select.replaceChildren();
+          models.forEach(function (model) {
+            var option = document.createElement('option');
+            option.value = model;
+            option.textContent = model;
+            select.appendChild(option);
+          });
+
+          if (!models.includes(selectedModel)) {
+            var customOption = document.createElement('option');
+            customOption.value = selectedModel;
+            customOption.textContent = 'Custom: ' + selectedModel;
+            select.prepend(customOption);
+          }
+          select.value = selectedModel;
+          status.textContent = models.length + ' model tersedia dari API key OpenAI ini.';
+        })
+        .catch(function (error) {
+          status.textContent = error.message || 'Gagal mengambil daftar model. Pilihan fallback tetap tersedia.';
+        })
+        .finally(function () {
+          refreshButton.disabled = false;
+        });
+    }
+
+    refreshButton.addEventListener('click', loadModels);
+    loadModels();
+  })();
+</script>
 
 <%- include('../partials/shell-end') %>

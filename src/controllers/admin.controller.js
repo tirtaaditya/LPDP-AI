@@ -1,4 +1,5 @@
 const db = require('../db');
+const OpenAI = require('openai');
 const authService = require('../services/auth.service');
 const { setAdminCookie, clearAdminCookie } = require('../middleware/csrf');
 const { safeClientMessage } = require('../utils/safeError');
@@ -439,6 +440,36 @@ async function settingsPage(req, res, next) {
     );
   } catch (err) {
     return next(err);
+  }
+}
+
+async function settingsOpenAiModels(req, res) {
+  try {
+    const apiKey = String(await db.getSetting('openai_api_key', '')).trim();
+    if (!apiKey) {
+      return res.status(503).json({
+        status: 'error',
+        data: null,
+        message: 'OpenAI API key belum dikonfigurasi.',
+      });
+    }
+
+    const client = new OpenAI({ apiKey });
+    const response = await client.models.list();
+    const models = (response.data || [])
+      .map((model) => String(model.id || ''))
+      .filter((model) => /^(gpt-|o[1-9])/.test(model))
+      .filter((model) => !/(audio|realtime|transcribe|tts|image)/i.test(model))
+      .sort((left, right) => left.localeCompare(right));
+
+    return res.json({ status: 'success', data: { models } });
+  } catch (err) {
+    console.error('Failed to load OpenAI models:', err.message);
+    return res.status(502).json({
+      status: 'error',
+      data: null,
+      message: 'Gagal mengambil daftar model dari OpenAI.',
+    });
   }
 }
 
@@ -1111,6 +1142,7 @@ module.exports = {
   tokensRevoke,
   tokensDelete,
   settingsPage,
+  settingsOpenAiModels,
   settingsUpdate,
   settingsKursSync,
   changePasswordPage,
