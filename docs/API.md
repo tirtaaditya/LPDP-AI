@@ -108,6 +108,19 @@ Authorization: Bearer <token>
 | `file_urls` | string[] | no | 1–10 URL (`http`/`https`) — server yang mendownload |
 | `file_url` | string | no | Alternatif single URL |
 | `schema_hint` | string | no | Hint field / skema JSON |
+| `file_reading_mode` | string | no | `auto` (default), `text`, `vision`, `ocr`, atau `hybrid` |
+
+### Metode pembacaan file
+
+| Mode | Perilaku |
+|------|----------|
+| `auto` | TXT/DOCX/PDF digital diparse sebagai teks; gambar dan PDF scan memakai Vision. |
+| `text` | Paksa parser teks. Gambar atau PDF scan dikembalikan sebagai error `FILE_TEXT_UNAVAILABLE`. |
+| `vision` | PDF selalu dilampirkan ke model Vision, termasuk PDF digital; TXT/DOCX tetap diparse sebagai teks. |
+| `ocr` | Sama seperti `vision`, dengan instruksi tambahan agar model memprioritaskan pembacaan teks, angka, tabel, dan label pada gambar/PDF. Membutuhkan provider OpenAI. |
+| `hybrid` | Untuk PDF digital, kirim hasil parser teks sekaligus PDF asli ke Vision. Cocok untuk tabel, cap, atau informasi visual. Membutuhkan provider OpenAI. |
+
+Mode `vision`, `ocr`, dan `hybrid` pada PDF/gambar memerlukan **AI Provider: OpenAI**. Provider Ollama hanya dapat memproses mode yang tidak menghasilkan attachment vision.
 
 **Contoh — prompt saja**
 
@@ -155,6 +168,7 @@ Authorization: Bearer <token>
 |-------|------|----------|------------|
 | `prompt` | text | **yes** | Instruksi ekstraksi / verifikasi |
 | `schema_hint` | text | no | Hint field / skema JSON |
+| `file_reading_mode` | text | no | Pilihan mode pembacaan seperti tabel di atas |
 | `file_uploads` | **file** (ulang field) | no | Upload **banyak file** — kirim field `file_uploads` berkali-kali |
 | `file_urls` | text | no | Opsional: JSON array string, atau URL dipisah koma |
 

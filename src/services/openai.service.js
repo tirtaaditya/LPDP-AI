@@ -55,7 +55,7 @@ async function getAiRuntime() {
   };
 }
 
-function buildTextPrompt(prompt, fileText, schemaHint, hasVisionFiles) {
+function buildTextPrompt(prompt, fileText, schemaHint, hasVisionFiles, fileReadingMode) {
   let content = String(prompt || '').trim();
 
   if (schemaHint) {
@@ -69,6 +69,11 @@ function buildTextPrompt(prompt, fileText, schemaHint, hasVisionFiles) {
   if (hasVisionFiles) {
     content +=
       '\n\nOne or more attached PDF files are scanned/image-based (no embedded text). Read the attached PDF file(s) carefully and extract the requested fields from them.';
+  }
+
+  if (fileReadingMode === 'ocr') {
+    content +=
+      '\n\nUse OCR-style reading: carefully transcribe visible text, numbers, tables, and labels from attached files before extracting the requested JSON fields.';
   }
 
   content +=
@@ -126,6 +131,7 @@ async function extractFromPrompt({
   fileText = '',
   schemaHint = '',
   visionFiles = [],
+  fileReadingMode = 'auto',
 }) {
   const runtime = await getAiRuntime();
   const { provider, client } = runtime;
@@ -151,7 +157,13 @@ async function extractFromPrompt({
     'You are a data extraction assistant. Always respond with valid JSON only.'
   );
 
-  const textPrompt = buildTextPrompt(prompt, fileText, schemaHint, hasVision);
+  const textPrompt = buildTextPrompt(
+    prompt,
+    fileText,
+    schemaHint,
+    hasVision,
+    fileReadingMode
+  );
 
   let userContent;
   if (hasVision) {
@@ -249,6 +261,7 @@ async function extractFromPrompt({
       usage: completion.usage || null,
       vision: hasVision,
       vision_files: visionFiles.map((f) => f.fileName),
+      file_reading_mode: fileReadingMode,
     },
   };
 }

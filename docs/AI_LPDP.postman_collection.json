@@ -2,14 +2,15 @@
   "info": {
     "_postman_id": "a1lpdp-ai-json-extract-001",
     "name": "AI LPDP",
-    "description": "AI LPDP — JSON Extraction API\n\n## Quick start\n1. Set environment `baseUrl` (contoh: http://localhost:9898)\n2. Auth → Login API User (access_token tersimpan otomatis)\n3. Extract:\n   - JSON + `file_urls` (server download)\n   - multipart + `file_uploads` (multi file upload)\n   - boleh gabung keduanya (max 10 file total)\n\nDefault API user: `api_user` / `Api@LPDP2026`\nOpenAI key: Admin → Settings\n\nDocs: docs/API.md",
+    "description": "AI LPDP — JSON Extraction API\n\n## Quick start\n1. Set environment `baseUrl` (contoh: http://localhost:9898)\n2. Auth → Login API User (access_token tersimpan otomatis)\n3. Extract:\n   - JSON + `file_urls` (server download)\n   - multipart + `file_uploads` (multi file upload)\n   - boleh gabung keduanya (max 10 file total)\n\n## File reading mode\nKirim field `file_reading_mode` pada JSON atau form-data. Nilai default adalah `auto`.\n- `auto`: parse TXT/DOCX/PDF digital sebagai teks; gambar dan PDF scan memakai OpenAI Vision.\n- `text`: parser teks saja; gambar/PDF scan menghasilkan `FILE_TEXT_UNAVAILABLE`.\n- `vision`: PDF selalu dikirim ke OpenAI Vision, termasuk PDF digital.\n- `ocr`: OpenAI Vision dengan instruksi fokus membaca teks, angka, tabel, dan label.\n- `hybrid`: PDF digital diparse sebagai teks lalu PDF asli juga dikirim ke OpenAI Vision.\n\n`vision`, `ocr`, dan `hybrid` membutuhkan AI Provider OpenAI. Ollama hanya mendukung mode yang tidak menghasilkan attachment vision.\n\nDefault API user: `api_user` / `Api@LPDP2026`\nOpenAI key: Admin → Settings\n\nDocs: docs/API.md",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
     { "key": "baseUrl", "value": "http://localhost:9898" },
     { "key": "access_token", "value": "" },
     { "key": "api_username", "value": "api_user" },
-    { "key": "api_password", "value": "Api@LPDP2026" }
+    { "key": "api_password", "value": "Api@LPDP2026" },
+    { "key": "file_reading_mode", "value": "auto" }
   ],
   "item": [
     {
@@ -99,10 +100,10 @@
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"prompt\": \"Ekstrak metadata makalah ke JSON: judul_makalah, nama_pembuat, penerbit, instansi dari semua file terlampir.\",\n  \"schema_hint\": \"judul_makalah, nama_pembuat, penerbit, instansi\",\n  \"file_urls\": [\n    \"https://example.com/path/makalah1.pdf\",\n    \"https://example.com/path/lampiran.docx\"\n  ]\n}"
+              "raw": "{\n  \"prompt\": \"Ekstrak metadata makalah ke JSON: judul_makalah, nama_pembuat, penerbit, instansi dari semua file terlampir.\",\n  \"schema_hint\": \"judul_makalah, nama_pembuat, penerbit, instansi\",\n  \"file_reading_mode\": \"{{file_reading_mode}}\",\n  \"file_urls\": [\n    \"https://example.com/path/makalah1.pdf\",\n    \"https://example.com/path/lampiran.docx\"\n  ]\n}"
             },
             "url": "{{baseUrl}}/api/v1/extract",
-            "description": "application/json.\n\nField `file_urls` (array). Backend mendownload tiap URL (max 10 total dengan upload).\n\nURL harus reachable dari server AI LPDP."
+            "description": "application/json.\n\nField `file_urls` (array). Backend mendownload tiap URL (max 10 total dengan upload).\n\n`file_reading_mode` memakai collection variable (default `auto`). Ubah variable menjadi `text`, `vision`, `ocr`, atau `hybrid` sesuai dokumen.\n\nURL harus reachable dari server AI LPDP."
           }
         },
         {
@@ -145,6 +146,12 @@
                   "type": "text"
                 },
                 {
+                  "key": "file_reading_mode",
+                  "value": "{{file_reading_mode}}",
+                  "type": "text",
+                  "description": "auto (default), text, vision, ocr, atau hybrid. Untuk PDF digital dengan tabel/stempel, gunakan hybrid."
+                },
+                {
                   "key": "file_uploads",
                   "type": "file",
                   "src": [],
@@ -165,7 +172,7 @@
               ]
             },
             "url": "{{baseUrl}}/api/v1/extract",
-            "description": "multipart/form-data.\n\n- `file_uploads`: kirim berkali-kali (multi file)\n- `file_urls` (text, opsional): JSON array string\n- Total file_urls + file_uploads max 10\n\nDisarankan untuk integrasi eRISPRO/backoffice agar tidak bergantung download lintas server."
+            "description": "multipart/form-data.\n\n- `file_uploads`: kirim berkali-kali (multi file)\n- `file_urls` (text, opsional): JSON array string\n- `file_reading_mode`: auto, text, vision, ocr, atau hybrid\n- Total file_urls + file_uploads max 10\n\nMode vision/ocr/hybrid yang mengirim PDF atau gambar ke Vision memerlukan provider OpenAI.\n\nDisarankan untuk integrasi eRISPRO/backoffice agar tidak bergantung download lintas server."
           }
         },
         {

@@ -52,6 +52,7 @@ async function extract(req, res) {
   const started = Date.now();
   const prompt = req.body?.prompt;
   const schemaHint = req.body?.schema_hint || '';
+  let fileReadingMode;
   const auth = authMeta(req);
   const ip = req.clientIp || req.ip;
   const fileUrls = fileService.parseFileUrls(req.body || {});
@@ -78,6 +79,15 @@ async function extract(req, res) {
     return failure(res, 'prompt is required', 400);
   }
 
+  try {
+    fileReadingMode = fileService.normalizeFileReadingMode(req.body?.file_reading_mode);
+  } catch (err) {
+    return failure(res, err.message, 400, {
+      request_id: req.requestId || null,
+      error_code: err.code || 'FILE_READING_MODE_INVALID',
+    });
+  }
+
   let fileMeta = {
     hasFile: false,
     fileName: null,
@@ -98,10 +108,10 @@ async function extract(req, res) {
 
     const [urlMeta, uploadMeta] = await Promise.all([
       fileUrls.length
-        ? fileService.downloadAndExtractMany(fileUrls)
+        ? fileService.downloadAndExtractMany(fileUrls, fileReadingMode)
         : Promise.resolve(null),
       uploads.length
-        ? fileService.processMulterUploads(uploads)
+        ? fileService.processMulterUploads(uploads, fileReadingMode)
         : Promise.resolve(null),
     ]);
 
@@ -112,6 +122,7 @@ async function extract(req, res) {
       fileText: fileMeta.fileText,
       schemaHint,
       visionFiles: fileMeta.visionFiles || [],
+      fileReadingMode,
     });
 
     const durationMs = Date.now() - started;
@@ -168,6 +179,7 @@ async function extract(req, res) {
         model: result.meta?.model,
         usage: result.meta?.usage || null,
         request_id: req.requestId,
+        file_reading_mode: fileReadingMode,
         files: fileMeta.files,
       },
     });
@@ -185,6 +197,7 @@ async function extract(req, res) {
         'FILE_TYPE_NOT_ALLOWED',
         'FILE_TOO_LARGE',
         'FILE_EMPTY',
+        'FILE_TEXT_UNAVAILABLE',
         'FILE_URL_INVALID',
         'FILE_DOWNLOAD_FAILED',
         'FILE_TOO_MANY',

@@ -9,6 +9,7 @@ const config = require('../config');
 const MAX_FILES = 10;
 const DOWNLOAD_TIMEOUT_MS = 60000;
 const IMAGE_EXTS = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp']);
+const FILE_READING_MODES = new Set(['auto', 'text', 'vision', 'ocr', 'hybrid']);
 
 function formatMb(bytes) {
   return (Number(bytes) / (1024 * 1024)).toFixed(2);
@@ -16,6 +17,17 @@ function formatMb(bytes) {
 
 function isImageExt(ext) {
   return IMAGE_EXTS.has(String(ext || '').toLowerCase());
+}
+
+function normalizeFileReadingMode(value) {
+  const mode = String(value || 'auto').trim().toLowerCase();
+  if (FILE_READING_MODES.has(mode)) return mode;
+
+  const err = new Error(
+    `Invalid file_reading_mode: ${value}. Allowed: ${[...FILE_READING_MODES].join(', ')}`
+  );
+  err.code = 'FILE_READING_MODE_INVALID';
+  throw err;
 }
 
 function mimeFromExt(ext) {
@@ -118,7 +130,8 @@ function guessExtension(urlObj, contentType, contentDisposition) {
 /**
  * @returns {{ text: string, needsVision: boolean, buffer?: Buffer }}
  */
-async function extractTextFromBuffer(buffer, ext, label = 'file') {
+async function extractTextFromBuffer(buffer, ext, label = 'file', fileReadingMode = 'auto') {
+  const mode = normalizeFileReadingMode(fileReadingMode);
   const allowed = await getAllowedExtensions();
   if (!allowed.includes(ext)) {
     const err = new Error(
@@ -151,10 +164,21 @@ async function extractTextFromBuffer(buffer, ext, label = 'file') {
     const result = await pdfParse(buffer);
     const text = (result.text || '').trim();
     if (!text) {
+      if (mode === 'text') {
+        const err = new Error(`No embedded text found in PDF: ${label}. Use file_reading_mode=vision, ocr, or auto.`);
+        err.code = 'FILE_TEXT_UNAVAILABLE';
+        throw err;
+      }
       // Scanned / image-only PDF → send to OpenAI file/vision mode
       return { text: '', needsVision: true, buffer, mime: 'application/pdf', kind: 'pdf' };
     }
-    return { text, needsVision: false, mime: 'application/pdf', kind: 'pdf' };
+    return {
+      text,
+      needsVision: ['vision', 'ocr', 'hybrid'].includes(mode),
+      buffer: ['vision', 'ocr', 'hybrid'].includes(mode) ? buffer : undefined,
+      mime: 'application/pdf',
+      kind: 'pdf',
+    };
   }
 
   if (ext === 'docx') {
@@ -169,6 +193,11 @@ async function extractTextFromBuffer(buffer, ext, label = 'file') {
   }
 
   if (isImageExt(ext)) {
+    if (mode === 'text') {
+      const err = new Error(`Image cannot be read in text mode: ${label}. Use file_reading_mode=vision, ocr, or auto.`);
+      err.code = 'FILE_TEXT_UNAVAILABLE';
+      throw err;
+    }
     return {
       text: '',
       needsVision: true,
@@ -183,7 +212,7 @@ async function extractTextFromBuffer(buffer, ext, label = 'file') {
   throw err;
 }
 
-async function downloadOne(urlString) {
+async function downloadOne(urlString, fileReadingMode = 'auto') {
   const urlObj = assertHttpUrl(urlString);
   const maxBytes = await getMaxUploadBytes();
   const controller = new AbortController();
@@ -232,7 +261,7 @@ async function downloadOne(urlString) {
     const fileName =
       path.basename(urlObj.pathname) || `download.${ext || 'bin'}`;
 
-    const extracted = await extractTextFromBuffer(buffer, ext, fileName);
+    const extracted = await extractTextFromBuffer(buffer, ext, fileName, fileReadingMode);
 
     return {
       url: urlObj.toString(),
@@ -288,7 +317,8 @@ function parseFileUrls(body = {}) {
   return [...new Set(urls.map((u) => String(u).trim()).filter(Boolean))];
 }
 
-async function downloadAndExtractMany(urls) {
+async function downloadAndExtractMany(urls, fileReadingMode = 'auto') {
+  const mode = normalizeFileReadingMode(fileReadingMode);
   if (!urls.length) {
     return {
       hasFile: false,
@@ -312,7 +342,7 @@ async function downloadAndExtractMany(urls) {
 
   const files = [];
   for (const url of urls) {
-    files.push(await downloadOne(url));
+    files.push(await downloadOne(url, mode));
   }
 
   const textParts = files
@@ -363,7 +393,8 @@ async function downloadAndExtractMany(urls) {
 /**
  * Process multipart uploads (multer files) — field name: file_uploads
  */
-async function processMulterUploads(multerFiles = []) {
+async function processMulterUploads(multerFiles = [], fileReadingMode = 'auto') {
+  const mode = normalizeFileReadingMode(fileReadingMode);
   const list = Array.isArray(multerFiles) ? multerFiles : [];
   if (!list.length) {
     return {
@@ -389,7 +420,7 @@ async function processMulterUploads(multerFiles = []) {
       const original = file.originalname || 'upload.bin';
       const ext = path.extname(original).replace('.', '').toLowerCase();
       const buffer = fs.readFileSync(file.path);
-      const extracted = await extractTextFromBuffer(buffer, ext, original);
+      const extracted = await extractTextFromBuffer(buffer, ext, original, mode);
       files.push({
         url: null,
         fileName: original,
@@ -512,6 +543,7 @@ module.exports = {
   processMulterUploads,
   mergeFileMeta,
   extractTextFromBuffer,
+  normalizeFileReadingMode,
   normalizeAllowedTypes,
   mimeFromExt,
   isImageExt,
