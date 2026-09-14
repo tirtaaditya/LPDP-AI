@@ -92,14 +92,20 @@
         </div>
       </div>
 
-      <div class="col-12"><hr class="my-1" /><div class="fw-bold">Token pricing (estimasi biaya)</div></div>
+      <div class="col-12"><hr class="my-1" /><div class="fw-bold">Token pricing (estimasi biaya)</div>
+        <div class="form-text mb-2">
+          Estimasi dihitung di app (bukan pull live dari OpenAI). Harga <strong>per model</strong> pakai katalog bawaan
+          (contoh: gpt-4o-mini $0.15/$0.60 · gpt-4o $2.50/$10.00 per 1M). Field di bawah = fallback untuk model yang belum ada di katalog (mis. Ollama).
+          Hasil disimpan ke log sebagai <code>cost_usd</code>/<code>cost_idr</code>.
+        </div>
+      </div>
       <div class="col-md-3">
-        <label class="form-label">Prompt price / 1M USD</label>
+        <label class="form-label">Fallback prompt / 1M USD</label>
         <input class="form-control" name="openai_price_prompt_per_1m_usd" type="number" step="0.0001" min="0"
           value="<%= settings.openai_price_prompt_per_1m_usd || '0.15' %>" />
       </div>
       <div class="col-md-3">
-        <label class="form-label">Completion price / 1M USD</label>
+        <label class="form-label">Fallback completion / 1M USD</label>
         <input class="form-control" name="openai_price_completion_per_1m_usd" type="number" step="0.0001" min="0"
           value="<%= settings.openai_price_completion_per_1m_usd || '0.60' %>" />
       </div>
@@ -107,11 +113,70 @@
         <label class="form-label">USD → IDR</label>
         <input class="form-control" name="usd_to_idr" type="number" step="1" min="0"
           value="<%= settings.usd_to_idr || '16000' %>" />
+        <div class="form-text">Bisa diisi manual atau auto dari Kurs BI LPDP.</div>
       </div>
       <div class="col-md-3">
         <label class="form-label">Image price USD</label>
         <input class="form-control" name="openai_image_price_usd" type="number" step="0.0001" min="0"
           value="<%= settings.openai_image_price_usd || '0.04' %>" />
+      </div>
+
+      <div class="col-12"><hr class="my-1" /><div class="fw-bold">Kurs BI otomatis (API Gateway LPDP)</div>
+        <div class="form-text mb-2">
+          Sumber: <a href="https://api-channellpdp.kemenkeu.go.id" target="_blank" rel="noopener">api-channellpdp.kemenkeu.go.id</a>
+          → <code>/Users/authenticate</code> lalu <code>/Kurs/bi?Currency=USD</code>.
+          Jadwal default: setiap hari jam <strong>10:00 WIB</strong>.
+        </div>
+      </div>
+      <div class="col-md-6 d-flex align-items-center">
+        <div class="form-check form-switch">
+          <input class="form-check-input" type="checkbox" role="switch" id="kurs_auto_enabled"
+                 name="kurs_auto_enabled" value="true"
+                 <%= settings.kurs_auto_enabled === 'true' ? 'checked' : '' %> />
+          <label class="form-check-label fw-semibold" for="kurs_auto_enabled">
+            Aktifkan update kurs otomatis
+          </label>
+        </div>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Jam sync (WIB)</label>
+        <input class="form-control" name="kurs_schedule_hour" type="number" min="0" max="23" step="1"
+          value="<%= settings.kurs_schedule_hour || '10' %>" />
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Ambil kurs</label>
+        <select class="form-select" name="kurs_rate_mode">
+          <option value="mid" <%= (settings.kurs_rate_mode || 'mid') === 'mid' ? 'selected' : '' %>>Mid (beli+jual)/2</option>
+          <option value="beli" <%= settings.kurs_rate_mode === 'beli' ? 'selected' : '' %>>Kurs beli</option>
+          <option value="jual" <%= settings.kurs_rate_mode === 'jual' ? 'selected' : '' %>>Kurs jual</option>
+        </select>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">API base URL</label>
+        <input class="form-control" name="kurs_api_base_url"
+          value="<%= settings.kurs_api_base_url || 'https://api-channellpdp.kemenkeu.go.id' %>" />
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Email / username</label>
+        <input class="form-control" name="kurs_api_email" autocomplete="username"
+          value="<%= settings.kurs_api_email || '' %>" placeholder="akun API Gateway" />
+      </div>
+      <div class="col-md-3">
+        <label class="form-label">Password API</label>
+        <input class="form-control" name="kurs_api_password" type="password" autocomplete="new-password"
+          placeholder="<%= hasKursPassword ? '•••• (isi untuk ganti)' : 'password API Gateway' %>" />
+      </div>
+      <div class="col-12">
+        <div class="small text-muted mb-2">
+          Last sync: <strong><%= settings.kurs_last_sync_at || '-' %></strong>
+          · value: <strong><%= settings.kurs_last_value || settings.usd_to_idr || '-' %></strong>
+          <% if (settings.kurs_last_error) { %>
+            <br /><span class="text-danger">Last error: <%= settings.kurs_last_error %></span>
+          <% } %>
+        </div>
+        <button formaction="/admin/settings/kurs-sync" formmethod="post" class="btn btn-outline-primary btn-sm" type="submit">
+          Sync kurs sekarang
+        </button>
       </div>
       <div class="col-12">
         <div class="form-text">

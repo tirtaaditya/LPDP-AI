@@ -422,6 +422,8 @@ async function settingsPage(req, res, next) {
     const ollamaKeyHint = hasOllamaKey
       ? `••••••••${rawOllamaKey.trim().slice(-4)}`
       : '';
+    const rawKursPass = settings.kurs_api_password || '';
+    const hasKursPassword = Boolean(rawKursPass.trim());
     return res.render(
       'admin/settings/index',
       pageLocals(req, {
@@ -432,6 +434,7 @@ async function settingsPage(req, res, next) {
         openAiKeyHint,
         hasOllamaKey,
         ollamaKeyHint,
+        hasKursPassword,
       })
     );
   } catch (err) {
@@ -458,21 +461,77 @@ async function settingsUpdate(req, res) {
       'openai_price_completion_per_1m_usd',
       'usd_to_idr',
       'openai_image_price_usd',
+      'extract_cache_enabled',
+      'extract_cache_ttl_sec',
+      'daily_cost_budget_usd',
+      'kurs_auto_enabled',
+      'kurs_api_base_url',
+      'kurs_api_email',
+      'kurs_rate_mode',
+      'kurs_schedule_hour',
     ];
 
     for (const key of allowed) {
       if (req.body[key] !== undefined) {
         let value = req.body[key];
-        if (key === 'ip_whitelist_enabled') {
+        if (
+          key === 'ip_whitelist_enabled' ||
+          key === 'extract_cache_enabled' ||
+          key === 'kurs_auto_enabled'
+        ) {
           value = value === 'true' || value === 'on' ? 'true' : 'false';
         }
         if (key === 'ai_provider') {
           value = String(value).toLowerCase() === 'ollama' ? 'ollama' : 'openai';
         }
+        if (key === 'kurs_rate_mode') {
+          const m = String(value || 'mid').toLowerCase();
+          value = ['beli', 'jual', 'mid'].includes(m) ? m : 'mid';
+        }
+        if (key === 'kurs_schedule_hour') {
+          const n = Number(value);
+          if (!Number.isFinite(n) || n < 0 || n > 23) {
+            return flashRedirect(
+              res,
+              '/admin/settings',
+              'error',
+              'kurs_schedule_hour harus 0–23'
+            );
+          }
+          value = String(Math.floor(n));
+        }
         if (key === 'allowed_file_types') {
           const fileService = require('../services/file.service');
           const list = fileService.normalizeAllowedTypes(value);
           value = list.length ? list.join(',') : 'pdf,docx,txt';
+        }
+        if (key === 'daily_cost_budget_usd') {
+          const raw = String(value || '').trim();
+          if (!raw) value = '';
+          else {
+            const n = Number(raw);
+            if (!Number.isFinite(n) || n < 0) {
+              return flashRedirect(
+                res,
+                '/admin/settings',
+                'error',
+                'Invalid daily_cost_budget_usd'
+              );
+            }
+            value = String(n);
+          }
+        }
+        if (key === 'extract_cache_ttl_sec') {
+          const n = Number(value);
+          if (!Number.isFinite(n) || n < 60) {
+            return flashRedirect(
+              res,
+              '/admin/settings',
+              'error',
+              'extract_cache_ttl_sec minimal 60 detik'
+            );
+          }
+          value = String(Math.floor(n));
         }
         if (
           [
@@ -500,6 +559,12 @@ async function settingsUpdate(req, res) {
     if (req.body.ip_whitelist_enabled === undefined) {
       await db.setSetting('ip_whitelist_enabled', 'false');
     }
+    if (req.body.extract_cache_enabled === undefined) {
+      await db.setSetting('extract_cache_enabled', 'false');
+    }
+    if (req.body.kurs_auto_enabled === undefined) {
+      await db.setSetting('kurs_auto_enabled', 'false');
+    }
 
     const newOpenAiKey = String(req.body.openai_api_key || '').trim();
     if (newOpenAiKey) {
@@ -511,9 +576,46 @@ async function settingsUpdate(req, res) {
       await db.setSetting('ollama_api_key', newOllamaKey);
     }
 
+    const newKursPass = String(req.body.kurs_api_password || '').trim();
+    if (newKursPass) {
+      await db.setSetting('kurs_api_password', newKursPass);
+    }
+
+    try {
+      const { startKursScheduler } = require('../jobs/kursScheduler');
+      await startKursScheduler();
+    } catch (err) {
+      console.error('[kurs] Reschedule failed:', err.message);
+    }
+
     return flashRedirect(res, '/admin/settings', 'flash', 'Settings saved');
   } catch (err) {
     return flashRedirect(res, '/admin/settings', 'error', err.message);
+  }
+}
+
+async function settingsKursSync(req, res) {
+  try {
+    const kursService = require('../services/kurs.service');
+    const result = await kursService.syncUsdToIdr({ force: true });
+    return flashRedirect(
+      res,
+      '/admin/settings',
+      'flash',
+      `Kurs USD synced: usd_to_idr=${result.usdToIdr} (mode=${result.mode})`
+    );
+  } catch (err) {
+    try {
+      await db.setSetting('kurs_last_error', String(err.message || err).slice(0, 500));
+    } catch {
+      // ignore
+    }
+    return flashRedirect(
+      res,
+      '/admin/settings',
+      'error',
+      err.message || 'Kurs sync failed'
+    );
   }
 }
 
@@ -621,6 +723,7 @@ async function logsData(req, res, next) {
             completionTokens: row.completion_tokens,
             schemaHint: row.schema_hint,
             responseStatus: row.response_status,
+            model: row.model,
           },
           pricing
         );
@@ -689,6 +792,7 @@ async function logsDetail(req, res, next) {
           completionTokens: log.completion_tokens,
           schemaHint: log.schema_hint,
           responseStatus: log.response_status,
+          model: log.model,
         },
         pricing
       );
@@ -1008,6 +1112,7 @@ module.exports = {
   tokensDelete,
   settingsPage,
   settingsUpdate,
+  settingsKursSync,
   changePasswordPage,
   changePassword,
   logsList,

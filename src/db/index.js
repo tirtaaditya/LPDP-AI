@@ -224,6 +224,15 @@ async function seed() {
     openai_price_completion_per_1m_usd: '0.60',
     usd_to_idr: '16000',
     openai_image_price_usd: '0.04',
+    kurs_auto_enabled: 'false',
+    kurs_api_base_url: 'https://api-channellpdp.kemenkeu.go.id',
+    kurs_api_email: '',
+    kurs_api_password: '',
+    kurs_rate_mode: 'mid',
+    kurs_schedule_hour: '10',
+    kurs_last_sync_at: '',
+    kurs_last_value: '',
+    kurs_last_error: '',
   };
 
   const pool = await getPool();
@@ -693,6 +702,7 @@ async function createExtractLog(entry) {
         completionTokens: entry.completionTokens,
         schemaHint: entry.schemaHint,
         responseStatus: entry.responseStatus,
+        model: entry.model,
       },
       pricing
     );
@@ -834,6 +844,21 @@ async function getUsageAnalytics({ days = 30 } = {}) {
              AND schema_hint LIKE N'%image%'
              AND response_status = N'success'
           THEN @image_price
+        WHEN LOWER(ISNULL(model, N'')) LIKE N'gpt-4o-mini%'
+          THEN (CAST(ISNULL(prompt_tokens, 0) AS FLOAT) / 1000000.0) * 0.15
+             + (CAST(ISNULL(completion_tokens, 0) AS FLOAT) / 1000000.0) * 0.60
+        WHEN LOWER(ISNULL(model, N'')) LIKE N'gpt-4o%'
+          THEN (CAST(ISNULL(prompt_tokens, 0) AS FLOAT) / 1000000.0) * 2.50
+             + (CAST(ISNULL(completion_tokens, 0) AS FLOAT) / 1000000.0) * 10.00
+        WHEN LOWER(ISNULL(model, N'')) LIKE N'gpt-4.1-mini%'
+          THEN (CAST(ISNULL(prompt_tokens, 0) AS FLOAT) / 1000000.0) * 0.40
+             + (CAST(ISNULL(completion_tokens, 0) AS FLOAT) / 1000000.0) * 1.60
+        WHEN LOWER(ISNULL(model, N'')) LIKE N'gpt-4.1-nano%'
+          THEN (CAST(ISNULL(prompt_tokens, 0) AS FLOAT) / 1000000.0) * 0.10
+             + (CAST(ISNULL(completion_tokens, 0) AS FLOAT) / 1000000.0) * 0.40
+        WHEN LOWER(ISNULL(model, N'')) LIKE N'gpt-4.1%'
+          THEN (CAST(ISNULL(prompt_tokens, 0) AS FLOAT) / 1000000.0) * 2.00
+             + (CAST(ISNULL(completion_tokens, 0) AS FLOAT) / 1000000.0) * 8.00
         ELSE
           (CAST(ISNULL(prompt_tokens, 0) AS FLOAT) / 1000000.0) * @prompt_price
           + (CAST(ISNULL(completion_tokens, 0) AS FLOAT) / 1000000.0) * @completion_price

@@ -11,6 +11,13 @@ async function start() {
       console.log(`[server] Admin UI: http://localhost:${config.port}/admin/login`);
       console.log(`[server] SQL Server: ${config.db.server}/${config.db.database}`);
     });
+
+    try {
+      const { startKursScheduler } = require('./jobs/kursScheduler');
+      await startKursScheduler();
+    } catch (err) {
+      console.error('[kurs] Failed to start scheduler:', err.message);
+    }
   } catch (err) {
     console.error('[server] Failed to start:', err.message);
     process.exit(1);
