@@ -473,6 +473,28 @@ async function settingsOpenAiModels(req, res) {
   }
 }
 
+async function modelPricingPage(req, res, next) {
+  try {
+    const pricingService = require('../services/pricing.service');
+    const pricing = await pricingService.getTokenPricing();
+    const models = Object.entries(pricing.modelCatalog)
+      .map(([model, rates]) => ({ model, ...rates }))
+      .sort((left, right) => left.model.localeCompare(right.model));
+
+    return res.render(
+      'admin/models/index',
+      pageLocals(req, {
+        activeMenu: 'models',
+        pageTitle: 'Model Pricing',
+        models,
+        pricing,
+      })
+    );
+  } catch (err) {
+    return next(err);
+  }
+}
+
 async function settingsUpdate(req, res) {
   try {
     const allowed = [
@@ -1143,6 +1165,7 @@ module.exports = {
   tokensDelete,
   settingsPage,
   settingsOpenAiModels,
+  modelPricingPage,
   settingsUpdate,
   settingsKursSync,
   changePasswordPage,

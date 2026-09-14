@@ -1,0 +1,63 @@
+<%- include('../partials/shell-start') %>
+
+<div class="card-panel">
+  <div class="card-header-bar d-flex justify-content-between align-items-center gap-3 flex-wrap">
+    <div>
+      <h2 class="mb-1">Model Pricing</h2>
+      <div class="text-muted small">Estimasi biaya token yang digunakan di AI Logs dan Dashboard.</div>
+    </div>
+    <a class="btn btn-outline-primary btn-sm" href="/admin/settings" title="Ubah fallback harga dan kurs">
+      <i class="bi bi-gear"></i> Settings
+    </a>
+  </div>
+  <div class="card-body-pad">
+    <div class="row g-3 mb-4">
+      <div class="col-md-4">
+        <div class="border rounded-2 p-3 h-100 bg-light">
+          <div class="text-muted small">Kurs USD ke IDR</div>
+          <div class="fs-5 fw-semibold">Rp <%= Number(pricing.usdToIdr).toLocaleString('id-ID') %></div>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="border rounded-2 p-3 h-100 bg-light">
+          <div class="text-muted small">Fallback input / 1M token</div>
+          <div class="fs-5 fw-semibold">$<%= pricing.promptPer1mUsd %></div>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="border rounded-2 p-3 h-100 bg-light">
+          <div class="text-muted small">Fallback output / 1M token</div>
+          <div class="fs-5 fw-semibold">$<%= pricing.completionPer1mUsd %></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0">
+        <thead>
+          <tr>
+            <th>Model</th>
+            <th class="text-end">Input / 1M</th>
+            <th class="text-end">Output / 1M</th>
+            <th class="text-end">Input / 1M (IDR)</th>
+            <th class="text-end">Output / 1M (IDR)</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% models.forEach((model) => { %>
+            <tr>
+              <td><code><%= model.model %></code></td>
+              <td class="text-end">$<%= model.promptPer1mUsd.toFixed(2) %></td>
+              <td class="text-end">$<%= model.completionPer1mUsd.toFixed(2) %></td>
+              <td class="text-end">Rp <%= Math.round(model.promptPer1mUsd * pricing.usdToIdr).toLocaleString('id-ID') %></td>
+              <td class="text-end">Rp <%= Math.round(model.completionPer1mUsd * pricing.usdToIdr).toLocaleString('id-ID') %></td>
+            </tr>
+          <% }); %>
+        </tbody>
+      </table>
+    </div>
+    <p class="text-muted small mb-0 mt-3">Harga katalog bersifat estimasi dan tidak ditarik langsung dari OpenAI. Model yang belum ada di tabel, termasuk Ollama atau model kustom, memakai fallback harga dari Settings.</p>
+  </div>
+</div>
+
+<%- include('../partials/shell-end') %>

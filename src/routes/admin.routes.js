@@ -94,6 +94,7 @@ router.get('/settings', requireAdminSession, adminController.settingsPage);
 router.get('/settings/openai-models', requireAdminSession, adminController.settingsOpenAiModels);
 router.post('/settings', requireAdminSession, adminController.settingsUpdate);
 router.post('/settings/kurs-sync', requireAdminSession, adminController.settingsKursSync);
+router.get('/models', requireAdminSession, adminController.modelPricingPage);
 
 router.get('/account/password', requireAdminSession, adminController.changePasswordPage);
 router.post('/account/password', requireAdminSession, adminController.changePassword);
