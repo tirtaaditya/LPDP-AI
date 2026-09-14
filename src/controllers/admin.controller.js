@@ -477,8 +477,36 @@ async function modelPricingPage(req, res, next) {
   try {
     const pricingService = require('../services/pricing.service');
     const pricing = await pricingService.getTokenPricing();
-    const models = Object.entries(pricing.modelCatalog)
-      .map(([model, rates]) => ({ model, ...rates }))
+    let availableModels = [];
+    let modelLoadError = null;
+    const apiKey = String(await db.getSetting('openai_api_key', '')).trim();
+
+    if (apiKey) {
+      try {
+        const client = new OpenAI({ apiKey });
+        const response = await client.models.list();
+        availableModels = (response.data || [])
+          .map((model) => String(model.id || ''))
+          .filter((model) => /^(gpt-|o[1-9])/.test(model))
+          .filter((model) => !/(audio|realtime|transcribe|tts|image)/i.test(model));
+      } catch (err) {
+        console.error('Failed to load OpenAI models for pricing:', err.message);
+        modelLoadError = 'Daftar model dari OpenAI tidak dapat dimuat. Menampilkan katalog harga lokal.';
+      }
+    } else {
+      modelLoadError = 'OpenAI API key belum dikonfigurasi. Menampilkan katalog harga lokal.';
+    }
+
+    const models = [...new Set([...Object.keys(pricing.modelCatalog), ...availableModels])]
+      .map((model) => {
+        const rates = pricingService.resolveRatesForModel(model, pricing);
+        return {
+          model,
+          promptPer1mUsd: rates.promptPer1mUsd,
+          completionPer1mUsd: rates.completionPer1mUsd,
+          priceSource: rates.source,
+        };
+      })
       .sort((left, right) => left.model.localeCompare(right.model));
 
     return res.render(
@@ -488,6 +516,7 @@ async function modelPricingPage(req, res, next) {
         pageTitle: 'Model Pricing',
         models,
         pricing,
+        modelLoadError,
       })
     );
   } catch (err) {

@@ -37,6 +37,7 @@
         <thead>
           <tr>
             <th>Model</th>
+            <th>Harga</th>
             <th class="text-end">Input / 1M</th>
             <th class="text-end">Output / 1M</th>
             <th class="text-end">Input / 1M (IDR)</th>
@@ -47,6 +48,13 @@
           <% models.forEach((model) => { %>
             <tr>
               <td><code><%= model.model %></code></td>
+              <td>
+                <% if (model.priceSource === 'model_catalog') { %>
+                  <span class="badge text-bg-success">Katalog</span>
+                <% } else { %>
+                  <span class="badge text-bg-secondary">Fallback</span>
+                <% } %>
+              </td>
               <td class="text-end">$<%= model.promptPer1mUsd.toFixed(2) %></td>
               <td class="text-end">$<%= model.completionPer1mUsd.toFixed(2) %></td>
               <td class="text-end">Rp <%= Math.round(model.promptPer1mUsd * pricing.usdToIdr).toLocaleString('id-ID') %></td>
@@ -56,7 +64,10 @@
         </tbody>
       </table>
     </div>
-    <p class="text-muted small mb-0 mt-3">Harga katalog bersifat estimasi dan tidak ditarik langsung dari OpenAI. Model yang belum ada di tabel, termasuk Ollama atau model kustom, memakai fallback harga dari Settings.</p>
+    <% if (modelLoadError) { %>
+      <div class="alert alert-warning mt-3 mb-0"><%= modelLoadError %></div>
+    <% } %>
+    <p class="text-muted small mb-0 mt-3">Daftar model ditarik dari API key OpenAI yang tersimpan saat halaman dibuka. Harga katalog bersifat estimasi dan tidak ditarik langsung dari OpenAI. Model bertanda Fallback memakai nilai fallback dari Settings.</p>
   </div>
 </div>
 
