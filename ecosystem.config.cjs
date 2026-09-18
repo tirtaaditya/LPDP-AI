@@ -1,4 +1,4 @@
-/** PM2 config for Windows Server */
+/** PM2 config for Windows Server XYZS*/
 module.exports = {
   apps: [
     {
