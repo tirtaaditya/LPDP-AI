@@ -29,6 +29,16 @@
     <div class="value"><%= counts.whitelist_count %></div>
   </div>
   <div class="stat-card">
+    <div class="icon bg-danger-soft"><i class="bi bi-shield-x"></i></div>
+    <div class="label">Blocked IPs</div>
+    <div class="value">
+      <a href="/admin/blocked" class="text-decoration-none text-reset">
+        <%= counts.blocked_ip_count || 0 %>
+      </a>
+    </div>
+    <div class="small text-muted mt-1"><%= counts.blocked_hit_count || 0 %> hits</div>
+  </div>
+  <div class="stat-card">
     <div class="icon bg-info-soft"><i class="bi bi-key-fill"></i></div>
     <div class="label">Active Tokens</div>
     <div class="value"><%= counts.tokens_count %></div>

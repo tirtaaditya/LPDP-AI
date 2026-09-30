@@ -340,6 +340,71 @@ async function whitelistDelete(req, res) {
   }
 }
 
+/* ===================== BLOCKED IPS ===================== */
+async function blockedList(req, res, next) {
+  try {
+    const rows = await db.listBlockedIpSummary();
+    const totalHits = rows.reduce((sum, r) => sum + Number(r.hit_count || 0), 0);
+    return res.render(
+      'admin/blocked/list',
+      pageLocals(req, {
+        activeMenu: 'blocked',
+        pageTitle: 'IP Blocked',
+        rows,
+        totalIps: rows.length,
+        totalHits,
+      })
+    );
+  } catch (err) {
+    return next(err);
+  }
+}
+
+async function blockedDetail(req, res, next) {
+  try {
+    const ip = decodeURIComponent(String(req.params.ip || '').trim());
+    if (!ip) return flashRedirect(res, '/admin/blocked', 'error', 'IP required');
+
+    const events = await db.listBlockedIpEvents(ip, 500);
+    const hitCount = await db.countBlockedIpEvents(ip);
+    if (!hitCount) {
+      return flashRedirect(res, '/admin/blocked', 'error', 'No history for this IP');
+    }
+
+    return res.render(
+      'admin/blocked/detail',
+      pageLocals(req, {
+        activeMenu: 'blocked',
+        pageTitle: `Blocked: ${ip}`,
+        ip,
+        events,
+        hitCount,
+      })
+    );
+  } catch (err) {
+    return next(err);
+  }
+}
+
+async function blockedClearIp(req, res) {
+  const ip = decodeURIComponent(String(req.params.ip || '').trim());
+  try {
+    await db.clearBlockedIpEvents(ip);
+    return flashRedirect(res, '/admin/blocked', 'flash', `Cleared history for ${ip}`);
+  } catch (err) {
+    return flashRedirect(res, '/admin/blocked', 'error', err.message);
+  }
+}
+
+async function blockedClearAll(req, res) {
+  try {
+    await db.clearBlockedIpEvents(null);
+    return flashRedirect(res, '/admin/blocked', 'flash', 'All blocked IP history cleared');
+  } catch (err) {
+    return flashRedirect(res, '/admin/blocked', 'error', err.message);
+  }
+}
+
 /* ===================== TOKENS ===================== */
 async function tokensList(req, res, next) {
   try {
@@ -1187,6 +1252,10 @@ module.exports = {
   whitelistEditForm,
   whitelistUpdate,
   whitelistDelete,
+  blockedList,
+  blockedDetail,
+  blockedClearIp,
+  blockedClearAll,
   tokensList,
   tokensCreateForm,
   tokensCreate,

@@ -1,0 +1,65 @@
+<%- include('../partials/shell-start') %>
+
+<div class="alert alert-info">
+  Riwayat IP yang ditolak <strong>IP Whitelist</strong>.
+  Setiap request 403 dihitung sebagai 1 hit. Detail menampilkan histori per attempt.
+</div>
+
+<div class="card-panel">
+  <div class="card-header-bar">
+    <h2>IP Blocked</h2>
+    <div class="d-flex gap-2 align-items-center">
+      <span class="text-muted small"><%= totalIps %> IP · <%= totalHits %> hits</span>
+      <% if (totalHits > 0) { %>
+        <form method="post" action="/admin/blocked/clear-all" class="d-inline js-confirm-submit"
+              data-confirm="Clear ALL blocked IP history?">
+          <%- include('../partials/csrf') %>
+          <button type="submit" class="btn btn-sm btn-light-danger">Clear all</button>
+        </form>
+      <% } %>
+    </div>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-modern table-hover align-middle mb-0 datatable w-100">
+      <thead>
+        <tr>
+          <th>IP</th>
+          <th>Hits</th>
+          <th>First seen</th>
+          <th>Last seen</th>
+          <th>Last user</th>
+          <th>Last path</th>
+          <th class="text-end">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% rows.forEach(function(row) { %>
+          <tr>
+            <td><code><%= row.ip %></code></td>
+            <td>
+              <span class="badge text-bg-danger"><%= row.hit_count %></span>
+            </td>
+            <td><%= row.first_seen %></td>
+            <td><%= row.last_seen %></td>
+            <td><%= row.last_username || '-' %></td>
+            <td class="text-truncate" style="max-width: 220px;" title="<%= row.last_path || '' %>">
+              <code class="small"><%= row.last_path || '-' %></code>
+            </td>
+            <td class="text-end text-nowrap">
+              <a href="/admin/blocked/<%= encodeURIComponent(row.ip) %>" class="btn btn-sm btn-light-primary">History</a>
+              <form method="post" action="/admin/blocked/<%= encodeURIComponent(row.ip) %>/clear"
+                    class="d-inline js-confirm-submit"
+                    data-confirm="Clear history for this IP?"
+                    data-label="<%= row.ip %>">
+                <%- include('../partials/csrf') %>
+                <button type="submit" class="btn btn-sm btn-light-danger">Clear</button>
+              </form>
+            </td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<%- include('../partials/shell-end') %>

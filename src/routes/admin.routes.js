@@ -84,6 +84,11 @@ router.get('/whitelist/:id/edit', requireAdminSession, adminController.whitelist
 router.post('/whitelist/:id', requireAdminSession, adminController.whitelistUpdate);
 router.post('/whitelist/:id/delete', requireAdminSession, adminController.whitelistDelete);
 
+router.get('/blocked', requireAdminSession, adminController.blockedList);
+router.post('/blocked/clear-all', requireAdminSession, adminController.blockedClearAll);
+router.get('/blocked/:ip', requireAdminSession, adminController.blockedDetail);
+router.post('/blocked/:ip/clear', requireAdminSession, adminController.blockedClearIp);
+
 router.get('/tokens', requireAdminSession, adminController.tokensList);
 router.get('/tokens/create', requireAdminSession, adminController.tokensCreateForm);
 router.post('/tokens', requireAdminSession, adminController.tokensCreate);

@@ -1,0 +1,50 @@
+<%- include('../partials/shell-start') %>
+
+<div class="card-panel">
+  <div class="card-header-bar">
+    <h2>Blocked history — <code><%= ip %></code></h2>
+    <div class="d-flex gap-2 align-items-center">
+      <span class="badge text-bg-danger"><%= hitCount %> hits</span>
+      <a href="/admin/blocked" class="btn btn-sm btn-light">Back</a>
+      <form method="post" action="/admin/blocked/<%= encodeURIComponent(ip) %>/clear"
+            class="d-inline js-confirm-submit"
+            data-confirm="Clear history for this IP?"
+            data-label="<%= ip %>">
+        <%- include('../partials/csrf') %>
+        <button type="submit" class="btn btn-sm btn-light-danger">Clear this IP</button>
+      </form>
+    </div>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-modern table-hover align-middle mb-0 datatable w-100">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Time</th>
+          <th>User</th>
+          <th>Method</th>
+          <th>Path</th>
+          <th>Reason</th>
+          <th>User-Agent</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% events.forEach(function(row) { %>
+          <tr>
+            <td><%= row.id %></td>
+            <td><%= row.created_at %></td>
+            <td><%= row.username || '-' %></td>
+            <td><code><%= row.method || '-' %></code></td>
+            <td><code class="small"><%= row.path || '-' %></code></td>
+            <td><%= row.reason || '-' %></td>
+            <td class="text-truncate" style="max-width: 240px;" title="<%= row.user_agent || '' %>">
+              <span class="small text-muted"><%= row.user_agent || '-' %></span>
+            </td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<%- include('../partials/shell-end') %>

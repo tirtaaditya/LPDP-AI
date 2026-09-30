@@ -550,6 +550,7 @@ body.sidebar-collapsed .aside-menu a.active {
 .bg-success-soft { background: linear-gradient(135deg, #34d399, #059669); }
 .bg-warning-soft { background: linear-gradient(135deg, #fbbf24, #f59e0b); color: #1f2937 !important; }
 .bg-info-soft { background: linear-gradient(135deg, #67e8f9, #0891b2); }
+.bg-danger-soft { background: linear-gradient(135deg, #fb7185, #e11d48); }
 
 .table-modern {
   width: 100%;

@@ -44,6 +44,21 @@ async function ipWhitelist(req, res, next) {
     const userId = req.auth?.userId;
     const allowed = await db.isIpAllowed(ip, userId);
     if (!allowed) {
+      const reason = `IP not allowed for API user (whitelist)`;
+      try {
+        await db.recordBlockedIp({
+          ip,
+          userId: userId || null,
+          username: req.auth?.username || null,
+          method: req.method,
+          path: req.originalUrl || req.url,
+          userAgent: req.get('user-agent') || null,
+          reason,
+        });
+      } catch (logErr) {
+        console.error('[ipWhitelist] Failed to record blocked IP:', logErr.message);
+      }
+
       return failure(
         res,
         `IP not allowed for this API user: ${ip}. Add this IP in Admin → IP Whitelist for your API user, or disable whitelist in Settings.`,

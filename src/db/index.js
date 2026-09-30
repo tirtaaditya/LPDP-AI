@@ -201,6 +201,25 @@ async function migrate() {
        AND COL_LENGTH('dbo.users', 'password_salt') IS NULL
       ALTER TABLE dbo.users ADD password_salt NVARCHAR(128) NULL;
   `);
+
+  await pool.request().query(`
+    IF OBJECT_ID('dbo.blocked_ip_logs', 'U') IS NULL
+    BEGIN
+      CREATE TABLE dbo.blocked_ip_logs (
+        id BIGINT IDENTITY(1,1) NOT NULL PRIMARY KEY,
+        ip NVARCHAR(64) NOT NULL,
+        user_id INT NULL,
+        username NVARCHAR(100) NULL,
+        method NVARCHAR(16) NULL,
+        path NVARCHAR(500) NULL,
+        user_agent NVARCHAR(500) NULL,
+        reason NVARCHAR(500) NULL,
+        created_at DATETIME2 NOT NULL CONSTRAINT DF_blocked_ip_created DEFAULT SYSUTCDATETIME()
+      );
+      CREATE INDEX IX_blocked_ip_logs_ip_created ON dbo.blocked_ip_logs (ip, created_at DESC);
+      CREATE INDEX IX_blocked_ip_logs_created ON dbo.blocked_ip_logs (created_at DESC);
+    END;
+  `);
 }
 
 async function seed() {
@@ -496,7 +515,11 @@ async function getDashboardCounts() {
       (SELECT COUNT(*) FROM dbo.users) AS users_count,
       (SELECT COUNT(*) FROM dbo.users WHERE role = 'api' AND is_active = 1) AS api_users_count,
       (SELECT COUNT(*) FROM dbo.whitelist_ips) AS whitelist_count,
-      (SELECT COUNT(*) FROM dbo.api_tokens WHERE is_active = 1) AS tokens_count
+      (SELECT COUNT(*) FROM dbo.api_tokens WHERE is_active = 1) AS tokens_count,
+      (SELECT CASE WHEN OBJECT_ID('dbo.blocked_ip_logs', 'U') IS NULL THEN 0
+                   ELSE (SELECT COUNT(DISTINCT ip) FROM dbo.blocked_ip_logs) END) AS blocked_ip_count,
+      (SELECT CASE WHEN OBJECT_ID('dbo.blocked_ip_logs', 'U') IS NULL THEN 0
+                   ELSE (SELECT COUNT(*) FROM dbo.blocked_ip_logs) END) AS blocked_hit_count
   `);
   return result.recordset[0];
 }
@@ -605,6 +628,106 @@ async function isIpAllowed(ip, userId) {
 
   const client = normalizeIp(ip);
   return rows.some((r) => normalizeIp(r.ip) === client);
+}
+
+async function recordBlockedIp({
+  ip,
+  userId = null,
+  username = null,
+  method = null,
+  path = null,
+  userAgent = null,
+  reason = null,
+} = {}) {
+  const pool = await getPool();
+  await pool
+    .request()
+    .input('ip', sql.NVarChar(64), normalizeIp(ip) || String(ip || '').trim())
+    .input('user_id', sql.Int, userId || null)
+    .input('username', sql.NVarChar(100), username || null)
+    .input('method', sql.NVarChar(16), method ? String(method).slice(0, 16) : null)
+    .input('path', sql.NVarChar(500), path ? String(path).slice(0, 500) : null)
+    .input('user_agent', sql.NVarChar(500), userAgent ? String(userAgent).slice(0, 500) : null)
+    .input('reason', sql.NVarChar(500), reason ? String(reason).slice(0, 500) : null)
+    .query(`
+      INSERT INTO dbo.blocked_ip_logs (ip, user_id, username, method, path, user_agent, reason)
+      VALUES (@ip, @user_id, @username, @method, @path, @user_agent, @reason)
+    `);
+}
+
+/** Aggregated blocked IPs with hit counts */
+async function listBlockedIpSummary() {
+  const pool = await getPool();
+  const result = await pool.request().query(`
+    SELECT
+      b.ip,
+      COUNT(*) AS hit_count,
+      MIN(b.created_at) AS first_seen,
+      MAX(b.created_at) AS last_seen,
+      (
+        SELECT TOP 1 x.username
+        FROM dbo.blocked_ip_logs x
+        WHERE x.ip = b.ip
+        ORDER BY x.created_at DESC
+      ) AS last_username,
+      (
+        SELECT TOP 1 x.path
+        FROM dbo.blocked_ip_logs x
+        WHERE x.ip = b.ip
+        ORDER BY x.created_at DESC
+      ) AS last_path,
+      (
+        SELECT TOP 1 x.reason
+        FROM dbo.blocked_ip_logs x
+        WHERE x.ip = b.ip
+        ORDER BY x.created_at DESC
+      ) AS last_reason
+    FROM dbo.blocked_ip_logs b
+    GROUP BY b.ip
+    ORDER BY hit_count DESC, last_seen DESC
+  `);
+  return result.recordset;
+}
+
+async function listBlockedIpEvents(ip, limit = 200) {
+  const pool = await getPool();
+  const result = await pool
+    .request()
+    .input('ip', sql.NVarChar(64), normalizeIp(ip) || String(ip || '').trim())
+    .input('limit', sql.Int, Number(limit) || 200)
+    .query(`
+      SELECT TOP (@limit)
+        id, ip, user_id, username, method, path, user_agent, reason, created_at
+      FROM dbo.blocked_ip_logs
+      WHERE ip = @ip
+      ORDER BY created_at DESC, id DESC
+    `);
+  return result.recordset;
+}
+
+async function countBlockedIpEvents(ip = null) {
+  const pool = await getPool();
+  if (ip) {
+    const result = await pool
+      .request()
+      .input('ip', sql.NVarChar(64), normalizeIp(ip) || String(ip || '').trim())
+      .query(`SELECT COUNT(*) AS total FROM dbo.blocked_ip_logs WHERE ip = @ip`);
+    return result.recordset[0].total;
+  }
+  const result = await pool.request().query(`SELECT COUNT(*) AS total FROM dbo.blocked_ip_logs`);
+  return result.recordset[0].total;
+}
+
+async function clearBlockedIpEvents(ip = null) {
+  const pool = await getPool();
+  if (ip) {
+    await pool
+      .request()
+      .input('ip', sql.NVarChar(64), normalizeIp(ip) || String(ip || '').trim())
+      .query(`DELETE FROM dbo.blocked_ip_logs WHERE ip = @ip`);
+    return;
+  }
+  await pool.request().query(`DELETE FROM dbo.blocked_ip_logs`);
 }
 
 async function listApiTokens() {
@@ -1021,6 +1144,11 @@ module.exports = {
   updateWhitelistIp,
   removeWhitelistIp,
   isIpAllowed,
+  recordBlockedIp,
+  listBlockedIpSummary,
+  listBlockedIpEvents,
+  countBlockedIpEvents,
+  clearBlockedIpEvents,
   listApiTokens,
   createApiToken,
   revokeApiToken,
