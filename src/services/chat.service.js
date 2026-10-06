@@ -717,14 +717,6 @@ async function chat({
   const { provider, client } = runtime;
   const hasVision = visionFiles.length > 0;
 
-  if (provider === 'ollama' && hasVision) {
-    const err = new Error(
-      'Image/scanned file detected. Switch AI Provider to OpenAI in Settings for vision chat, or use text PDF/DOCX/TXT.'
-    );
-    err.code = 'OLLAMA_SCANNED_PDF';
-    throw err;
-  }
-
   let model = runtime.model;
   if (provider === 'openai' && hasVision) {
     model = pickVisionModel(model);

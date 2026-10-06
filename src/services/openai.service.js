@@ -2,39 +2,6 @@ const OpenAI = require('openai');
 const db = require('../db');
 
 async function getAiRuntime() {
-  const provider = String(await db.getSetting('ai_provider', 'openai'))
-    .trim()
-    .toLowerCase();
-
-  if (provider === 'ollama') {
-    let baseUrl = String(await db.getSetting('ollama_base_url', '')).trim().replace(/\/+$/, '');
-    if (!baseUrl) {
-      const err = new Error(
-        'Ollama base URL is not configured. Set it in Admin → Settings'
-      );
-      err.code = 'OLLAMA_NOT_CONFIGURED';
-      throw err;
-    }
-    if (!baseUrl.endsWith('/v1')) {
-      baseUrl = `${baseUrl}/v1`;
-    }
-
-    const apiKey =
-      String(await db.getSetting('ollama_api_key', '')).trim() || 'ollama';
-    const model =
-      String(await db.getSetting('ollama_model', 'gpt-oss:latest')).trim() ||
-      'gpt-oss:latest';
-
-    return {
-      provider: 'ollama',
-      model,
-      client: new OpenAI({
-        apiKey,
-        baseURL: baseUrl,
-      }),
-    };
-  }
-
   const apiKey = String(await db.getSetting('openai_api_key', '')).trim();
   if (!apiKey) {
     const err = new Error(
@@ -137,14 +104,6 @@ async function extractFromPrompt({
   const { provider, client } = runtime;
   const hasVision = Array.isArray(visionFiles) && visionFiles.length > 0;
 
-  if (provider === 'ollama' && hasVision) {
-    const err = new Error(
-      'Image/scanned file detected. Ollama cannot process vision in this app — switch AI Provider to OpenAI in Settings, or use a text-based PDF/DOCX/TXT.'
-    );
-    err.code = 'OLLAMA_SCANNED_PDF';
-    throw err;
-  }
-
   let model = runtime.model;
   if (provider === 'openai' && hasVision) {
     model = pickVisionModel(model);
@@ -219,10 +178,6 @@ async function extractFromPrompt({
         wrapped.status = err2.status || err2.statusCode || err.status || 502;
         throw wrapped;
       }
-    } else if (provider === 'ollama') {
-      // Some Ollama models reject response_format
-      console.warn('Ollama json_object failed, retry without response_format:', err.message);
-      completion = await client.chat.completions.create(basePayload);
     } else {
       const wrapped = new Error(
         err?.error?.message || err.message || 'OpenAI request failed'

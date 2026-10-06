@@ -17,14 +17,10 @@ const INPUT_LIMITS = {
   name: 200,
 
   // settings
-  ai_provider: 20,
   openai_api_key: 300,
   openai_model: 100,
   openai_image_model: 100,
   openai_image_size: 20,
-  ollama_base_url: 500,
-  ollama_model: 100,
-  ollama_api_key: 300,
   openai_price_prompt_per_1m_usd: 20,
   openai_price_completion_per_1m_usd: 20,
   usd_to_idr: 20,

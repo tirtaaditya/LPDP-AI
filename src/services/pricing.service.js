@@ -75,7 +75,7 @@ async function getTokenPricing() {
 /**
  * Resolve rates for a specific model.
  * 1) Built-in catalog by model name
- * 2) Else Settings fallback (openai_price_* ) — used for unknown / Ollama models
+ * 2) Else Settings fallback (openai_price_* ) — used for unknown models
  */
 function resolveRatesForModel(model, pricing = DEFAULTS) {
   const catalog = lookupModelPrices(model);

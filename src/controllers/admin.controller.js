@@ -487,11 +487,6 @@ async function settingsPage(req, res, next) {
     const openAiKeyHint = hasOpenAiKey
       ? `••••••••${rawKey.trim().slice(-4)}`
       : '';
-    const rawOllamaKey = settings.ollama_api_key || '';
-    const hasOllamaKey = Boolean(rawOllamaKey.trim());
-    const ollamaKeyHint = hasOllamaKey
-      ? `••••••••${rawOllamaKey.trim().slice(-4)}`
-      : '';
     const rawKursPass = settings.kurs_api_password || '';
     const hasKursPassword = Boolean(rawKursPass.trim());
     return res.render(
@@ -502,8 +497,6 @@ async function settingsPage(req, res, next) {
         settings,
         hasOpenAiKey,
         openAiKeyHint,
-        hasOllamaKey,
-        ollamaKeyHint,
         hasKursPassword,
       })
     );
@@ -596,12 +589,9 @@ async function modelPricingPage(req, res, next) {
 async function settingsUpdate(req, res) {
   try {
     const allowed = [
-      'ai_provider',
       'openai_model',
       'openai_image_model',
       'openai_image_size',
-      'ollama_base_url',
-      'ollama_model',
       'temperature',
       'max_tokens',
       'system_prompt',
@@ -631,9 +621,6 @@ async function settingsUpdate(req, res) {
           key === 'kurs_auto_enabled'
         ) {
           value = value === 'true' || value === 'on' ? 'true' : 'false';
-        }
-        if (key === 'ai_provider') {
-          value = String(value).toLowerCase() === 'ollama' ? 'ollama' : 'openai';
         }
         if (key === 'kurs_rate_mode') {
           const m = String(value || 'mid').toLowerCase();
@@ -720,11 +707,6 @@ async function settingsUpdate(req, res) {
     const newOpenAiKey = String(req.body.openai_api_key || '').trim();
     if (newOpenAiKey) {
       await db.setSetting('openai_api_key', newOpenAiKey);
-    }
-
-    const newOllamaKey = String(req.body.ollama_api_key || '').trim();
-    if (newOllamaKey) {
-      await db.setSetting('ollama_api_key', newOllamaKey);
     }
 
     const newKursPass = String(req.body.kurs_api_password || '').trim();
@@ -974,11 +956,8 @@ async function logsDetail(req, res, next) {
 async function chatPage(req, res, next) {
   try {
     const settings = await db.getAllSettings();
-    const provider = settings.ai_provider || 'openai';
-    const model =
-      provider === 'ollama'
-        ? settings.ollama_model || '-'
-        : settings.openai_model || '-';
+    const provider = 'openai';
+    const model = settings.openai_model || '-';
     const fileService = require('../services/file.service');
     const allowedTypes = await fileService.getAllowedExtensions();
     const acceptAttr = allowedTypes

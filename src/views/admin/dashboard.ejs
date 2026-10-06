@@ -220,14 +220,12 @@
     <div class="runtime-grid">
       <div class="runtime-item">
         <div class="runtime-label">AI Provider</div>
-        <div class="runtime-value text-uppercase"><%= settings.ai_provider || 'openai' %></div>
+        <div class="runtime-value text-uppercase">openai</div>
       </div>
       <div class="runtime-item">
         <div class="runtime-label">Model</div>
         <div class="runtime-value">
-          <%= (settings.ai_provider === 'ollama'
-                ? (settings.ollama_model || '-')
-                : (settings.openai_model || '-')) %>
+          <%= settings.openai_model || '-' %>
         </div>
       </div>
       <div class="runtime-item">
