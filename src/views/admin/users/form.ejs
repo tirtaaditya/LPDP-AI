@@ -10,7 +10,7 @@
       <%- include('../partials/csrf') %>
       <div class="col-md-6">
         <label class="form-label">Username</label>
-        <input class="form-control" name="username" value="<%= user.username || '' %>" required />
+        <input class="form-control" name="username" value="<%= user.username || '' %>" maxlength="<%= limits.username %>" required />
       </div>
       <div class="col-md-6">
         <label class="form-label">Role</label>
@@ -26,12 +26,15 @@
         <input
           class="form-control"
           type="password"
+          id="user_password"
           name="password"
           minlength="8"
+          maxlength="<%= limits.password %>"
           <%= mode === 'create' ? 'required' : '' %>
         />
+        <%- include('../partials/password-rules', { inputId: 'user_password', username: user.username || '' }) %>
         <div class="form-text">
-          Password di-hash bcrypt; salt unik disimpan terpisah di kolom <code>password_salt</code>. Minimal 8 karakter.
+          Password di-hash bcrypt; salt unik disimpan terpisah di kolom <code>password_salt</code>.
         </div>
       </div>
       <% if (mode === 'edit') { %>

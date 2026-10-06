@@ -218,6 +218,10 @@ async function usersUpdate(req, res) {
   const id = Number(req.params.id);
   const { username, role, is_active, password } = req.body || {};
   try {
+    if (password && String(password).trim()) {
+      const { validatePassword } = require('../utils/password');
+      validatePassword(String(password), { username: String(username || '').trim() });
+    }
     await db.updateUser(id, {
       username: String(username || '').trim(),
       role,
@@ -1009,6 +1013,14 @@ async function chatMessage(req, res) {
   const requestId = req.requestId || null;
 
   const message = String(req.body?.message || '').trim();
+  const { INPUT_LIMITS } = require('../config/inputLimits');
+  if (message.length > INPUT_LIMITS.message) {
+    return res.status(400).json({
+      status: 'error',
+      data: null,
+      message: `Pesan chat maksimal ${INPUT_LIMITS.message} karakter`,
+    });
+  }
   let history = [];
   try {
     history = JSON.parse(req.body?.history || '[]');
@@ -1193,8 +1205,15 @@ async function changePassword(req, res) {
   if (!current_password || !new_password || !confirm_password) {
     return flashRedirect(res, redirectTo, 'error', 'Semua field wajib diisi');
   }
-  if (String(new_password).length < 8) {
-    return flashRedirect(res, redirectTo, 'error', 'Password baru minimal 8 karakter');
+  const { getPasswordIssues } = require('../utils/password');
+  const issues = getPasswordIssues(new_password, { username: req.admin?.sub || '' });
+  if (issues.length) {
+    return flashRedirect(
+      res,
+      redirectTo,
+      'error',
+      `Password baru terlalu lemah. Wajib: ${issues.join(', ')}`
+    );
   }
   if (String(new_password) !== String(confirm_password)) {
     return flashRedirect(res, redirectTo, 'error', 'Konfirmasi password tidak cocok');

@@ -40,11 +40,51 @@ async function comparePassword(plain, hash, salt = null) {
   return bcrypt.compare(String(plain), String(hash));
 }
 
-function validatePassword(plain, { field = 'Password' } = {}) {
+const COMMON_WEAK_PASSWORDS = new Set([
+  'password',
+  'password1',
+  'password123',
+  'passw0rd',
+  'p@ssw0rd',
+  'p@ssword',
+  'qwerty123',
+  'qwertyuiop',
+  'admin123',
+  'admin@123',
+  'administrator',
+  'welcome1',
+  'welcome123',
+  'letmein1',
+  'iloveyou',
+  'lpdp2026',
+  'lpdp@2026',
+]);
+
+/** Returns list of unmet rules (Indonesian messages); empty array = strong */
+function getPasswordIssues(plain, { username = '' } = {}) {
   const value = String(plain || '');
-  if (value.length < MIN_PASSWORD_LENGTH) {
-    const err = new Error(`${field} must be at least ${MIN_PASSWORD_LENGTH} characters`);
-    err.code = 'PASSWORD_TOO_SHORT';
+  const issues = [];
+  if (value.length < MIN_PASSWORD_LENGTH) issues.push(`minimal ${MIN_PASSWORD_LENGTH} karakter`);
+  if (!/[a-z]/.test(value)) issues.push('huruf kecil (a-z)');
+  if (!/[A-Z]/.test(value)) issues.push('huruf besar (A-Z)');
+  if (!/[0-9]/.test(value)) issues.push('angka (0-9)');
+  if (!/[^A-Za-z0-9]/.test(value)) issues.push('simbol (mis. !@#$%)');
+  if (/\s/.test(value)) issues.push('tanpa spasi');
+  if (/(.)\1{3,}/.test(value)) issues.push('tidak boleh 4+ karakter sama berulang');
+
+  const lower = value.toLowerCase();
+  if (COMMON_WEAK_PASSWORDS.has(lower)) issues.push('tidak boleh password umum');
+  const uname = String(username || '').trim().toLowerCase();
+  if (uname.length >= 3 && lower.includes(uname)) issues.push('tidak boleh mengandung username');
+  return issues;
+}
+
+function validatePassword(plain, { field = 'Password', username = '' } = {}) {
+  const value = String(plain || '');
+  const issues = getPasswordIssues(value, { username });
+  if (issues.length) {
+    const err = new Error(`${field} terlalu lemah. Wajib: ${issues.join(', ')}`);
+    err.code = 'PASSWORD_WEAK';
     err.status = 400;
     throw err;
   }
@@ -57,5 +97,6 @@ module.exports = {
   isLegacyHash,
   hashPassword,
   comparePassword,
+  getPasswordIssues,
   validatePassword,
 };

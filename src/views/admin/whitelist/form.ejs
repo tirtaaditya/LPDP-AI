@@ -23,11 +23,11 @@
       </div>
       <div class="col-md-6">
         <label class="form-label">IP Address</label>
-        <input class="form-control" name="ip" value="<%= row.ip || '' %>" placeholder="10.44.200.10" required />
+        <input class="form-control" name="ip" value="<%= row.ip || '' %>" placeholder="10.44.200.10" maxlength="<%= limits.ip %>" required />
       </div>
       <div class="col-12">
         <label class="form-label">Label</label>
-        <input class="form-control" name="label" value="<%= row.label || '' %>" placeholder="Office / VPN" />
+        <input class="form-control" name="label" value="<%= row.label || '' %>" placeholder="Office / VPN" maxlength="<%= limits.label %>" />
       </div>
       <div class="col-12 pt-2">
         <button type="submit" class="btn btn-primary px-4">

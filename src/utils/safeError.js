@@ -8,6 +8,7 @@ function safeClientMessage(err, fallback = 'Request failed') {
 
   const byCode = {
     PASSWORD_TOO_SHORT: err.message,
+    PASSWORD_WEAK: err.message,
     SESSION_IDLE: 'Session expired due to inactivity. Please login again.',
     SESSION_EXPIRED: 'Session expired. Please login again.',
     ELOGIN: 'Database connection error',

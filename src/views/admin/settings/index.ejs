@@ -31,6 +31,7 @@
           class="form-control"
           type="password"
           name="openai_api_key"
+          maxlength="<%= limits.openai_api_key %>"
           value=""
           autocomplete="new-password"
           placeholder="<%= hasOpenAiKey ? ('Key tersimpan: ' + openAiKeyHint + ' — kosongkan jika tidak diganti') : 'sk-proj-... paste key di sini' %>"
@@ -60,7 +61,7 @@
       </div>
       <div class="col-md-4">
         <label class="form-label">Image model</label>
-        <input class="form-control" name="openai_image_model" value="<%= settings.openai_image_model || 'gpt-image-1' %>" placeholder="gpt-image-1" />
+        <input class="form-control" name="openai_image_model" maxlength="<%= limits.openai_image_model %>" value="<%= settings.openai_image_model || 'gpt-image-1' %>" placeholder="gpt-image-1" />
       </div>
       <div class="col-md-2">
         <label class="form-label">Image size</label>
@@ -84,12 +85,12 @@
       <div class="col-12"><hr class="my-1" /><div class="fw-bold">Ollama</div></div>
       <div class="col-md-8">
         <label class="form-label">Ollama Base URL</label>
-        <input class="form-control" name="ollama_base_url" value="<%= settings.ollama_base_url || '' %>" placeholder="http://10.44.200.73:11434" />
+        <input class="form-control" name="ollama_base_url" maxlength="<%= limits.ollama_base_url %>" value="<%= settings.ollama_base_url || '' %>" placeholder="http://10.44.200.73:11434" />
         <div class="form-text">Tanpa trailing slash. App otomatis pakai <code>/v1</code> (OpenAI-compatible).</div>
       </div>
       <div class="col-md-4">
         <label class="form-label">Ollama Model</label>
-        <input class="form-control" name="ollama_model" value="<%= settings.ollama_model || '' %>" placeholder="gpt-oss:latest" />
+        <input class="form-control" name="ollama_model" maxlength="<%= limits.ollama_model %>" value="<%= settings.ollama_model || '' %>" placeholder="gpt-oss:latest" />
       </div>
       <div class="col-12">
         <label class="form-label">Ollama API Key</label>
@@ -97,6 +98,7 @@
           class="form-control"
           type="password"
           name="ollama_api_key"
+          maxlength="<%= limits.ollama_api_key %>"
           value=""
           autocomplete="new-password"
           placeholder="<%= hasOllamaKey ? ('Key tersimpan: ' + ollamaKeyHint + ' — kosongkan jika tidak diganti') : 'lpdp_...' %>"
@@ -168,17 +170,17 @@
       </div>
       <div class="col-md-6">
         <label class="form-label">API base URL</label>
-        <input class="form-control" name="kurs_api_base_url"
+        <input class="form-control" name="kurs_api_base_url" maxlength="<%= limits.kurs_api_base_url %>"
           value="<%= settings.kurs_api_base_url || 'https://api-channellpdp.kemenkeu.go.id' %>" />
       </div>
       <div class="col-md-3">
         <label class="form-label">Email / username</label>
-        <input class="form-control" name="kurs_api_email" autocomplete="username"
+        <input class="form-control" name="kurs_api_email" maxlength="<%= limits.kurs_api_email %>" autocomplete="username"
           value="<%= settings.kurs_api_email || '' %>" placeholder="akun API Gateway" />
       </div>
       <div class="col-md-3">
         <label class="form-label">Password API</label>
-        <input class="form-control" name="kurs_api_password" type="password" autocomplete="new-password"
+        <input class="form-control" name="kurs_api_password" maxlength="<%= limits.kurs_api_password %>" type="password" autocomplete="new-password"
           placeholder="<%= hasKursPassword ? '•••• (isi untuk ganti)' : 'password API Gateway' %>" />
       </div>
       <div class="col-12">
@@ -204,21 +206,22 @@
       <div class="col-12"><hr class="my-1" /><div class="fw-bold">Common</div></div>
       <div class="col-md-3">
         <label class="form-label">Temperature</label>
-        <input class="form-control" name="temperature" value="<%= settings.temperature || '' %>" />
+        <input class="form-control" name="temperature" maxlength="<%= limits.temperature %>" value="<%= settings.temperature || '' %>" />
       </div>
       <div class="col-md-3">
         <label class="form-label">Max tokens</label>
-        <input class="form-control" name="max_tokens" value="<%= settings.max_tokens || '' %>" />
+        <input class="form-control" name="max_tokens" maxlength="<%= limits.max_tokens %>" value="<%= settings.max_tokens || '' %>" />
       </div>
       <div class="col-md-3">
         <label class="form-label">Max upload (MB)</label>
-        <input class="form-control" name="max_upload_mb" value="<%= settings.max_upload_mb || '' %>" />
+        <input class="form-control" name="max_upload_mb" maxlength="<%= limits.max_upload_mb %>" value="<%= settings.max_upload_mb || '' %>" />
       </div>
       <div class="col-12">
         <label class="form-label">Allowed file types</label>
         <input
           class="form-control"
           name="allowed_file_types"
+          maxlength="<%= limits.allowed_file_types %>"
           value="<%= settings.allowed_file_types || 'pdf,docx,txt' %>"
           placeholder="pdf,docx,txt,jpg,jpeg,png"
         />
@@ -230,7 +233,20 @@
       </div>
       <div class="col-12">
         <label class="form-label">System prompt</label>
-        <textarea class="form-control" name="system_prompt" rows="6"><%= settings.system_prompt || '' %></textarea>
+        <textarea class="form-control" id="system_prompt" name="system_prompt" rows="6" maxlength="<%= limits.system_prompt %>"><%= settings.system_prompt || '' %></textarea>
+        <div class="form-text text-end">
+          <span id="system_prompt_count"><%= (settings.system_prompt || '').length %></span> / <%= limits.system_prompt %> karakter
+        </div>
+        <script>
+          (function () {
+            var el = document.getElementById('system_prompt');
+            var counter = document.getElementById('system_prompt_count');
+            if (!el || !counter) return;
+            el.addEventListener('input', function () {
+              counter.textContent = el.value.length;
+            });
+          })();
+        </script>
       </div>
       <div class="col-12">
         <div class="form-check form-switch">

@@ -5,10 +5,14 @@ const multer = require('multer');
 const adminController = require('../controllers/admin.controller');
 const { requireAdminSession } = require('../middleware/auth');
 const { loginLimiter } = require('../middleware/rateLimit');
+const { enforceInputLimits, exposeInputLimits } = require('../middleware/inputLimits');
 const config = require('../config');
 const fileService = require('../services/file.service');
 
 const router = express.Router();
+
+router.use(exposeInputLimits);
+router.use(enforceInputLimits);
 
 if (!fs.existsSync(config.uploadsDir)) {
   fs.mkdirSync(config.uploadsDir, { recursive: true });

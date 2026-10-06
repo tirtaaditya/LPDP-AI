@@ -67,7 +67,7 @@
               <span>Username</span>
               <div class="ai-input">
                 <i class="bi bi-cpu"></i>
-                <input id="username" name="username" type="text" required autocomplete="username" placeholder="admin" />
+                <input id="username" name="username" type="text" maxlength="<%= limits.username %>" required autocomplete="username" placeholder="admin" />
               </div>
             </label>
 
@@ -75,7 +75,7 @@
               <span>Access Key</span>
               <div class="ai-input">
                 <i class="bi bi-fingerprint"></i>
-                <input id="password" name="password" type="password" required autocomplete="current-password" placeholder="••••••••••••" />
+                <input id="password" name="password" type="password" maxlength="<%= limits.password %>" required autocomplete="current-password" placeholder="••••••••••••" />
               </div>
             </label>
 

@@ -277,7 +277,7 @@ async function seed() {
   for (const u of seedUsers) {
     const existing = await findUserByUsername(u.username);
     if (!existing) {
-      await createUser(u.username, u.password, u.role);
+      await createUser(u.username, u.password, u.role, { skipPolicy: true });
       console.log(`[db] Seeded user '${u.username}' role=${u.role}`);
       continue;
     }
@@ -290,7 +290,7 @@ async function seed() {
         null
       );
       if (stillDefault) {
-        await updateUserPassword(existing.id, u.password);
+        await updateUserPassword(existing.id, u.password, { skipPolicy: true });
         console.log(`[db] Migrated password_salt for seed user '${u.username}'`);
       } else {
         console.log(
@@ -384,12 +384,12 @@ async function listApiUsers() {
   return result.recordset;
 }
 
-async function createUser(username, password, role) {
+async function createUser(username, password, role, { skipPolicy = false } = {}) {
   if (!['admin', 'api'].includes(role)) {
     throw new Error('role must be admin or api');
   }
   const { hashPassword, validatePassword } = require('../utils/password');
-  validatePassword(password);
+  if (!skipPolicy) validatePassword(password, { username });
   const { hash: passwordHash, salt: passwordSalt } = await hashPassword(password);
   const pool = await getPool();
   const result = await pool
@@ -406,9 +406,13 @@ async function createUser(username, password, role) {
   return result.recordset[0];
 }
 
-async function updateUserPassword(id, password) {
+/** skipPolicy: only for re-hashing an already-accepted password (legacy salt upgrade) */
+async function updateUserPassword(id, password, { skipPolicy = false } = {}) {
   const { hashPassword, validatePassword } = require('../utils/password');
-  validatePassword(password);
+  if (!skipPolicy) {
+    const user = await findUserById(id);
+    validatePassword(password, { username: user?.username || '' });
+  }
   const { hash: passwordHash, salt: passwordSalt } = await hashPassword(password);
   const pool = await getPool();
   await pool
@@ -541,7 +545,7 @@ async function verifyUserCredentials(username, password, expectedRole = null) {
   // Old accounts (no password_salt): keep login working, then upgrade hash+salt
   if (legacy) {
     try {
-      await updateUserPassword(user.id, password);
+      await updateUserPassword(user.id, password, { skipPolicy: true });
       console.log(`[db] Upgraded password_salt for user '${user.username}' after login`);
     } catch (err) {
       console.error(

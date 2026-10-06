@@ -34,7 +34,7 @@
       <i class="bi bi-paperclip"></i>
       <input type="file" id="chat-files" name="files" multiple accept="<%= typeof acceptAttr !== 'undefined' ? acceptAttr : '.pdf,.docx,.txt,application/pdf' %>" hidden />
     </label>
-    <textarea id="chat-input" rows="1" placeholder="Tulis pesan... (Enter kirim, Shift+Enter baris baru)" required></textarea>
+    <textarea id="chat-input" rows="1" maxlength="<%= limits.message %>" placeholder="Tulis pesan... (Enter kirim, Shift+Enter baris baru)" required></textarea>
     <button type="submit" id="chat-send" class="btn btn-primary">
       <i class="bi bi-send-fill"></i>
     </button>
