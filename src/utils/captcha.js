@@ -1,35 +1,23 @@
 const crypto = require('crypto');
-const config = require('../config');
 
 const CAPTCHA_COOKIE = 'login_captcha';
 const CAPTCHA_TTL_MS = 10 * 60 * 1000;
 const CODE_LENGTH = 5;
 
-function signPayload(payload) {
-  const body = Buffer.from(JSON.stringify(payload)).toString('base64url');
-  const sig = crypto
-    .createHmac('sha256', config.adminSessionSecret)
-    .update(body)
-    .digest('base64url');
-  return `${body}.${sig}`;
-}
+/**
+ * Server-side captcha store: id → { code, exp }
+ * Cookie only carries opaque id (never the answer).
+ */
+const captchaStore = new Map();
 
-function unsignPayload(token) {
-  if (!token || typeof token !== 'string' || !token.includes('.')) return null;
-  const [body, sig] = token.split('.');
-  const expected = crypto
-    .createHmac('sha256', config.adminSessionSecret)
-    .update(body)
-    .digest('base64url');
-  const a = Buffer.from(sig);
-  const b = Buffer.from(expected);
-  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
-  try {
-    return JSON.parse(Buffer.from(body, 'base64url').toString('utf8'));
-  } catch {
-    return null;
+function pruneExpiredCaptchas() {
+  const now = Date.now();
+  for (const [id, entry] of captchaStore.entries()) {
+    if (!entry || now > Number(entry.exp)) captchaStore.delete(id);
   }
 }
+
+setInterval(pruneExpiredCaptchas, 60 * 1000).unref?.();
 
 function randomDigits(length = CODE_LENGTH) {
   let out = '';
@@ -92,7 +80,6 @@ function renderCaptchaSvg(code) {
 </svg>`;
 }
 
-/** Map digit → frequency (Hz) for audio playback. */
 const DIGIT_FREQ = {
   0: 440,
   1: 494,
@@ -142,8 +129,8 @@ function renderCaptchaWav(code) {
   buffer.write('WAVE', 8);
   buffer.write('fmt ', 12);
   buffer.writeUInt32LE(16, 16);
-  buffer.writeUInt16LE(1, 20); // PCM
-  buffer.writeUInt16LE(1, 22); // mono
+  buffer.writeUInt16LE(1, 20);
+  buffer.writeUInt16LE(1, 22);
   buffer.writeUInt32LE(sampleRate, 24);
   buffer.writeUInt32LE(sampleRate * 2, 28);
   buffer.writeUInt16LE(2, 32);
@@ -160,31 +147,52 @@ function renderCaptchaWav(code) {
   return buffer;
 }
 
-function createCaptcha() {
+function createCaptcha(previousId = null) {
+  if (previousId) captchaStore.delete(String(previousId));
+  pruneExpiredCaptchas();
+
   const code = randomDigits(CODE_LENGTH);
-  const payload = {
+  const id = crypto.randomBytes(32).toString('base64url');
+  captchaStore.set(id, {
     code,
     exp: Date.now() + CAPTCHA_TTL_MS,
-  };
+  });
+
   return {
+    id,
+    /** Opaque nonce for cookie — does NOT contain the answer */
+    token: id,
     code,
-    token: signPayload(payload),
     svg: renderCaptchaSvg(code),
     wav: renderCaptchaWav(code),
   };
 }
 
-function readCaptcha(token) {
-  const payload = unsignPayload(token);
-  if (!payload || !payload.code || !payload.exp) return null;
-  if (Date.now() > Number(payload.exp)) return null;
-  return payload;
+/** Peek captcha for image/audio without consuming. */
+function peekCaptcha(id) {
+  if (!id) return null;
+  const entry = captchaStore.get(String(id));
+  if (!entry || !entry.code || !entry.exp) return null;
+  if (Date.now() > Number(entry.exp)) {
+    captchaStore.delete(String(id));
+    return null;
+  }
+  return { code: entry.code, exp: entry.exp };
 }
 
-function verifyCaptcha(token, input) {
-  const payload = readCaptcha(token);
-  if (!payload) return false;
-  const expected = String(payload.code);
+/**
+ * Verify user input and ALWAYS invalidate the captcha (one-time use),
+ * whether the attempt succeeds or fails.
+ */
+function consumeCaptcha(id, input) {
+  const key = id ? String(id) : '';
+  const entry = key ? captchaStore.get(key) : null;
+  if (key) captchaStore.delete(key);
+
+  if (!entry || !entry.code || !entry.exp) return false;
+  if (Date.now() > Number(entry.exp)) return false;
+
+  const expected = String(entry.code);
   const got = String(input || '')
     .replace(/\s+/g, '')
     .trim();
@@ -193,6 +201,16 @@ function verifyCaptcha(token, input) {
   const b = Buffer.from(expected);
   if (a.length !== b.length) return false;
   return crypto.timingSafeEqual(a, b);
+}
+
+/** @deprecated use consumeCaptcha — kept for callers during transition */
+function verifyCaptcha(token, input) {
+  return consumeCaptcha(token, input);
+}
+
+/** @deprecated use peekCaptcha */
+function readCaptcha(token) {
+  return peekCaptcha(token);
 }
 
 function captchaCookieOptions(req) {
@@ -206,12 +224,24 @@ function captchaCookieOptions(req) {
   };
 }
 
+function clearCaptchaCookie(req, res) {
+  res.clearCookie(CAPTCHA_COOKIE, {
+    httpOnly: true,
+    sameSite: 'strict',
+    secure: require('./requestScheme').cookieSecureForRequest(req),
+    path: '/admin',
+  });
+}
+
 module.exports = {
   CAPTCHA_COOKIE,
   createCaptcha,
-  readCaptcha,
+  peekCaptcha,
+  consumeCaptcha,
   verifyCaptcha,
+  readCaptcha,
   captchaCookieOptions,
+  clearCaptchaCookie,
   renderCaptchaSvg,
   renderCaptchaWav,
 };

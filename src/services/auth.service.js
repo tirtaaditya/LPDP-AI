@@ -108,7 +108,7 @@ function verifyAdminSession(token) {
   return { ...payload, issuedAtMs, lastActivity };
 }
 
-/** Re-issue cookie JWT with refreshed lastActivity (sliding 1h idle). */
+/** Re-issue cookie JWT with refreshed lastActivity (sliding idle; capped by max lifetime). */
 function touchAdminSession(payload) {
   return signAdminSession(payload, {
     issuedAtMs: payload.issuedAtMs,

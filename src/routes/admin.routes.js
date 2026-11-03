@@ -4,7 +4,7 @@ const fs = require('fs');
 const multer = require('multer');
 const adminController = require('../controllers/admin.controller');
 const { requireAdminSession } = require('../middleware/auth');
-const { loginLimiter } = require('../middleware/rateLimit');
+const { loginLimiter, captchaLimiter } = require('../middleware/rateLimit');
 const { enforceInputLimits, exposeInputLimits } = require('../middleware/inputLimits');
 const config = require('../config');
 const fileService = require('../services/file.service');
@@ -59,9 +59,9 @@ function chatUpload(req, res, next) {
 
 router.get('/login', adminController.renderLogin);
 router.post('/login', loginLimiter, adminController.postLogin);
-router.get('/captcha/image', adminController.captchaImage);
-router.get('/captcha/audio', adminController.captchaAudio);
-router.get('/captcha/refresh', adminController.captchaRefresh);
+router.get('/captcha/image', captchaLimiter, adminController.captchaImage);
+router.get('/captcha/audio', captchaLimiter, adminController.captchaAudio);
+router.get('/captcha/refresh', captchaLimiter, adminController.captchaRefresh);
 router.post('/logout', requireAdminSession, adminController.logout);
 
 router.get('/', requireAdminSession, adminController.dashboard);

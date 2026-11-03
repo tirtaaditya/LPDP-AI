@@ -6,9 +6,10 @@ const { safeClientMessage } = require('../utils/safeError');
 const {
   CAPTCHA_COOKIE,
   createCaptcha,
-  verifyCaptcha,
-  readCaptcha,
+  consumeCaptcha,
+  peekCaptcha,
   captchaCookieOptions,
+  clearCaptchaCookie,
   renderCaptchaSvg,
   renderCaptchaWav,
 } = require('../utils/captcha');
@@ -30,7 +31,8 @@ function pageLocals(req, extra = {}) {
 }
 
 function issueLoginCaptcha(req, res) {
-  const captcha = createCaptcha();
+  const previousId = req.cookies?.[CAPTCHA_COOKIE] || null;
+  const captcha = createCaptcha(previousId);
   res.cookie(CAPTCHA_COOKIE, captcha.token, captchaCookieOptions(req));
   return captcha;
 }
@@ -59,9 +61,13 @@ function renderLogin(req, res) {
 
 async function postLogin(req, res) {
   const { username, password, captcha } = req.body || {};
-  const captchaToken = req.cookies?.[CAPTCHA_COOKIE];
+  const captchaId = req.cookies?.[CAPTCHA_COOKIE];
 
-  if (!verifyCaptcha(captchaToken, captcha)) {
+  // One-time use: answer is checked server-side; id is always invalidated
+  const captchaOk = consumeCaptcha(captchaId, captcha);
+  clearCaptchaCookie(req, res);
+
+  if (!captchaOk) {
     res.status(400);
     return renderLoginView(req, res, {
       error: 'Captcha salah atau kedaluwarsa. Coba lagi.',
@@ -76,37 +82,32 @@ async function postLogin(req, res) {
     });
   }
 
-  res.clearCookie(CAPTCHA_COOKIE, { path: '/admin' });
   const token = authService.signAdminSession(user);
   setAdminCookie(req, res, token);
   return res.redirect('/admin');
 }
 
 function captchaImage(req, res) {
-  const token = req.cookies?.[CAPTCHA_COOKIE];
-  const payload = readCaptcha(token);
-  if (!payload) {
-    const captcha = issueLoginCaptcha(req, res);
-    res.setHeader('Content-Type', 'image/svg+xml');
-    res.setHeader('Cache-Control', 'no-store');
-    return res.send(captcha.svg);
-  }
+  const id = req.cookies?.[CAPTCHA_COOKIE];
+  const payload = peekCaptcha(id);
   res.setHeader('Content-Type', 'image/svg+xml');
   res.setHeader('Cache-Control', 'no-store');
+  if (!payload) {
+    const captcha = issueLoginCaptcha(req, res);
+    return res.send(captcha.svg);
+  }
   return res.send(renderCaptchaSvg(payload.code));
 }
 
 function captchaAudio(req, res) {
-  const token = req.cookies?.[CAPTCHA_COOKIE];
-  const payload = readCaptcha(token);
-  if (!payload) {
-    const captcha = issueLoginCaptcha(req, res);
-    res.setHeader('Content-Type', 'audio/wav');
-    res.setHeader('Cache-Control', 'no-store');
-    return res.send(captcha.wav);
-  }
+  const id = req.cookies?.[CAPTCHA_COOKIE];
+  const payload = peekCaptcha(id);
   res.setHeader('Content-Type', 'audio/wav');
   res.setHeader('Cache-Control', 'no-store');
+  if (!payload) {
+    const captcha = issueLoginCaptcha(req, res);
+    return res.send(captcha.wav);
+  }
   return res.send(renderCaptchaWav(payload.code));
 }
 

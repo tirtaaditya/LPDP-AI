@@ -60,8 +60,8 @@ const config = {
   adminSessionSecret: required('ADMIN_SESSION_SECRET', 'change_this_admin_session_secret'),
   /** Idle timeout: logout after no activity (default 1 hour) */
   adminSessionIdleMs: Number(process.env.ADMIN_SESSION_IDLE_MS || 60 * 60 * 1000),
-  /** Absolute max session lifetime (default 8 hours) */
-  adminSessionMaxMs: Number(process.env.ADMIN_SESSION_MAX_MS || 8 * 60 * 60 * 1000),
+  /** Absolute max session + cookie MaxAge (default 1 hour — aligned with idle) */
+  adminSessionMaxMs: Number(process.env.ADMIN_SESSION_MAX_MS || 60 * 60 * 1000),
   /** bcrypt cost — salt is generated automatically per hash */
   bcryptRounds: Number(process.env.BCRYPT_ROUNDS || 12),
   maxUploadMb: Number(process.env.MAX_UPLOAD_MB || 10),
