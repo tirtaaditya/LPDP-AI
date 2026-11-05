@@ -619,15 +619,32 @@ function normalizeIp(ip) {
 }
 
 async function isIpAllowed(ip, userId) {
-  const enabled = (await getSetting('ip_whitelist_enabled', 'false')) === 'true';
-  if (!enabled) return true;
-  if (!userId) return false;
+  const enabled =
+    String(await getSetting('ip_whitelist_enabled', 'false') || '')
+      .trim()
+      .toLowerCase() === 'true';
+  if (!enabled) return { allowed: true, enabled: false, rowCount: 0 };
 
-  const rows = await listWhitelistIps(userId);
-  if (rows.length === 0) return false;
+  const uid = Number(userId);
+  if (!uid || Number.isNaN(uid)) {
+    return { allowed: false, enabled: true, rowCount: 0, reason: 'missing_user' };
+  }
+
+  const rows = await listWhitelistIps(uid);
+  const rowCount = rows.length;
+  // Fail closed: whitelist ON + no IPs registered → deny
+  if (rowCount === 0) {
+    return { allowed: false, enabled: true, rowCount: 0, reason: 'empty_whitelist' };
+  }
 
   const client = normalizeIp(ip);
-  return rows.some((r) => normalizeIp(r.ip) === client);
+  const allowed = rows.some((r) => normalizeIp(r.ip) === client);
+  return {
+    allowed,
+    enabled: true,
+    rowCount,
+    reason: allowed ? 'matched' : 'ip_not_listed',
+  };
 }
 
 async function recordBlockedIp({
