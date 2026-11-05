@@ -88,7 +88,7 @@ Client API   ──► /api/v1/* ──► JWT / Token + IP ──► Extract �
 
 **Catatan**
 
-- Session idle default **1 jam** (sliding); maksimum absolut **8 jam**.
+- Session idle default **1 jam** (sliding); cookie MaxAge / maksimum absolut juga **1 jam**.
 - Salah captcha / kredensial → pesan error di form.
 
 ---
@@ -149,12 +149,13 @@ Setelah buat user `api`, atur **IP Whitelist** (jika fitur aktif) dan/atau **API
 ### 4.5 IP Whitelist
 
 Daftar IP yang diizinkan memanggil extract **per user API**, jika Settings → **IP whitelist enabled** = on.
+Saat ON: hanya IP terdaftar yang boleh; user API tanpa IP = ditolak semua.
 
 1. Pilih user API.
 2. Tambah IP (contoh `10.216.4.50`).
 3. Simpan.
 
-Jika whitelist **off**, semua IP boleh (tetap butuh Bearer token).
+Jika whitelist **off**, semua IP boleh (tetap butuh Bearer token). Jika **on** dan belum ada IP untuk user itu, extract ditolak (403).
 
 ---
 
@@ -258,9 +259,9 @@ Simpan `meta.request_id` untuk dicari di AI Logs.
 
 | Fitur | Keterangan |
 |-------|------------|
-| Captcha | Login admin |
+| Captcha | Login admin — jawaban di server (cookie hanya nonce); sekali pakai; rate limit login ketat |
 | CSRF | Semua POST admin |
-| Session | HttpOnly cookie, idle 1 jam |
+| Session | HttpOnly cookie, idle + MaxAge 1 jam |
 | Helmet / CSP | Header keamanan (adaptasi HTTP/HTTPS) |
 | Password | bcrypt + salt |
 | API | JWT atau token + opsional IP whitelist |

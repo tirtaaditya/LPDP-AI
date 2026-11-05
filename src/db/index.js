@@ -603,8 +603,8 @@ async function removeWhitelistIp(id) {
 /**
  * Per API user whitelist:
  * - If global ip_whitelist_enabled = false → allow all
- * - If user has no IP rows → allow all for that user
- * - Else IP must match one of the user's whitelist rows
+ * - If enabled: only explicitly listed IPs for that user are allowed
+ * - If enabled and user has zero whitelist rows → deny all for that user
  * - ::1 / localhost treated as 127.0.0.1
  */
 function normalizeIp(ip) {
@@ -624,7 +624,7 @@ async function isIpAllowed(ip, userId) {
   if (!userId) return false;
 
   const rows = await listWhitelistIps(userId);
-  if (rows.length === 0) return true;
+  if (rows.length === 0) return false;
 
   const client = normalizeIp(ip);
   return rows.some((r) => normalizeIp(r.ip) === client);

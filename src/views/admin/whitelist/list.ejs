@@ -4,6 +4,11 @@
   IP Whitelist global status:
   <strong><%= whitelistEnabled ? 'ENABLED' : 'DISABLED' %></strong>
   — ubah di menu Settings.
+  <% if (whitelistEnabled) { %>
+    <div class="mt-1 small">Saat ENABLED: hanya IP yang didaftarkan yang boleh. User API tanpa IP = ditolak semua.</div>
+  <% } else { %>
+    <div class="mt-1 small">Saat DISABLED: semua IP boleh (tetap butuh Bearer token).</div>
+  <% } %>
 </div>
 
 <div class="card-panel">

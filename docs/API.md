@@ -75,7 +75,7 @@ Authorization: Bearer <access_token>
 
 Static token dibuat di **Admin → API Tokens**.
 
-Jika IP whitelist aktif (Admin → Settings), IP client harus ada di whitelist user tersebut.
+Jika IP whitelist aktif (Admin → Settings), IP client harus ada di whitelist user tersebut. User tanpa IP terdaftar ditolak (deny-by-default).
 
 ---
 

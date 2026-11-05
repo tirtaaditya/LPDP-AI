@@ -243,7 +243,7 @@ PORT=3000
 |--------------------|--------------------------------------------------------------------------|
 | **Login**          | Username + password admin (lihat section 3.1)                            |
 | **API Tokens**     | Buat / revoke / label; simpan hash; plaintext hanya sekali saat create   |
-| **IP Whitelist**   | Daftar IP yang boleh akses API; kosong = allow all (bisa dikonfigurasi)  |
+| **IP Whitelist**   | Saat enabled: hanya IP terdaftar yang boleh; user tanpa IP = deny all |
 | **Settings**       | `openai_model`, `temperature`, `max_tokens`, system prompt default, max upload size, allowed file types |
 | **Users**          | Admin user + API user (username/password)                                |
 
